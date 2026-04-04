@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+OUTPUT_FILE="/tmp/log_all_file"
+FILES=()
+
+err() {
+	tput setaf 1
+	printf '[ERROR] '
+	tput sgr0
+	printf '%s\n' "$*" >&2
+	exit 1
+}
+
+warn() {
+	tput setaf 3
+	printf '[WARN] '
+	tput sgr0
+	printf '%s\n' "$*" >&2
+}
+
+need_cmd() {
+	command -v "$1" >/dev/null 2>&1 || err "Required command not found: $1"
+}
+
+add_file() {
+	local file="$1"
+	FILES+=("$file")
+}
+
+find_type() {
+	local ext="$1"
+
+	while IFS= read -r -d '' file; do
+		add_file "$file"
+	done < <(find . -maxdepth 1 -type f -name "*$ext" -print0)
+}
+
+write_log() {
+	local file
+
+	: > "$OUTPUT_FILE"
+	for file in "$@"; do
+		printf '========== START OF FILE: %s ==========\n' "$file" >> "$OUTPUT_FILE"
+		cat "$file" >> "$OUTPUT_FILE"
+		printf '\n=========== END OF FILE: %s ===========\n' "$file" >> "$OUTPUT_FILE"
+	done
+}
+
+main() {
+	need_cmd cat
+	need_cmd sort
+	need_cmd find
+
+	if [ "$#" -eq 0 ]; then
+		while IFS= read -r -d '' file; do
+			add_file "$file"
+		done < <(find . -maxdepth 1 -type f -print0)
+	else
+		for lang in "$@"; do
+			case "$lang" in
+				c)
+					find_type ".c"
+					find_type ".h"
+					;;
+				cpp|c++)
+					find_type ".h"
+					find_type ".cc"
+					find_type ".hh"
+					find_type ".cpp"
+					find_type ".hpp"
+					;;
+				py|python)
+					find_type ".py"
+					;;
+				sh|bash)
+					find_type ".sh"
+					;;
+				js|javascript)
+					find_type ".js"
+					;;
+				ts|typescript)
+					find_type ".ts"
+					;;
+				*)
+					err "Unknown language: $lang"
+					;;
+			esac
+		done
+	fi
+	
+	if ! [ "${#FILES[@]}" -gt 0 ]; then
+		warn "No matching files found"
+		exit 0
+	fi
+
+	mapfile -t FILES < <(printf '%s\n' "${FILES[@]}" | sort -u)
+
+	write_log "${FILES[@]}"
+
+	if command -v xdg-open >/dev/null 2>&1; then
+		xdg-open "$OUTPUT_FILE" >/dev/null 2>&1 &
+	elif command -v open >/dev/null 2>&1; then
+		open "$OUTPUT_FILE" >/dev/null 2>&1 &
+	else
+		printf '%s\n' "$OUTPUT_FILE"
+	fi
+}
+
+main "$@"
