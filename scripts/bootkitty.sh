@@ -159,18 +159,20 @@ print_summary() {
 }
 
 launch_kitty() {
+	ok "1: entered launch"
 	if [ "$LAUNCH" -ne 1 ]; then
 		return 0
 	fi
-
+	ok "2: launch flag was 1"
 	if [ ! -x "$KITTY_APP_DIR/bin/kitty" ]; then
 		err "Kitty executable not found"
 		exit 1
 	fi
-
+	ok "3: found kitty executable"
 	log "Launching kitty..."
-	"$KITTY_APP_DIR/bin/kitty" >/dev/null 2>&1 &
-	setsid kitty & exit
+	setsid kitty >/dev/null 2>&1 &
+	exit 0
+	ok "4: somehow got past exit 0"
 }
 
 main() {
