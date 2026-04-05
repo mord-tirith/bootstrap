@@ -2,6 +2,12 @@
 set -euo pipefail
 
 OUTPUT_FILE="/tmp/log_all_file"
+STATE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/log_all"
+STATE_FILE="$STATE_DIR/defaults"
+SAVE_DEFAULTS=0
+CLEAR_DEFAULTS=0
+MAX_DEPTH=1
+LANGS=()
 FILES=()
 
 err() {
@@ -19,6 +25,13 @@ warn() {
 	printf '%s\n' "$*" >&2
 }
 
+log() {
+	tput setaf 51
+	printf '[INFO] '
+	tput sgr0
+	printf '%s\n' "$*" >&1
+}
+
 need_cmd() {
 	command -v "$1" >/dev/null 2>&1 || err "Required command not found: $1"
 }
@@ -33,7 +46,7 @@ find_type() {
 
 	while IFS= read -r -d '' file; do
 		add_file "$file"
-	done < <(find . -maxdepth 1 -type f -name "*$ext" -print0)
+	done < <(find . -maxdepth "$MAX_DEPTH" -type f -name "*$ext" -print0)
 }
 
 write_log() {
@@ -47,49 +60,113 @@ write_log() {
 	done
 }
 
+save_defaults() {
+	mkdir -p "$STATE_DIR"
+	printf '%s\n' "${LANGS[@]}" > "$STATE_FILE"
+}
+
+load_defaults() {
+	if [ -f "$STATE_FILE" ]; then
+		mapfile -t LANGS < "$STATE_FILE"
+	fi
+}
+
+clear_defaults() {
+	if [ -f "$STATE_FILE" ]; then
+		rm -f -- "$STATE_FILE"
+		log "Saved defaults cleared"
+	else
+		warn "No defaults file to remove"
+	fi
+}
+
+parse_args() {
+	for arg in "$@"; do
+		case "$arg" in
+			-s|--save) SAVE_DEFAULTS=1 ;;
+			-c|--clean) CLEAR_DEFAULTS=1 ;;
+			*) LANGS+=("$arg") ;;
+		esac
+	done
+	if [ "$SAVE_DEFAULTS" -eq 1 ] && [ "$CLEAR_DEFAULTS" -eq 1 ]; then
+		err "-c and -s can't run together"
+	fi
+}
+
+parse_langs() {
+	for lang in "${LANGS[@]}"; do
+		case "$lang" in
+			c)
+				find_type ".c"
+				find_type ".h"
+				;;
+			c++|cpp)
+				find_type ".h"
+				find_type ".hh"
+				find_type ".cc"
+				find_type ".cpp"
+				find_type ".hpp"
+				;;
+			py|python)
+				find_type ".py"
+				;;
+			lua|nvim)
+				find_type ".lua"
+				;;
+			sh|shell|script|bash)
+				find_type ".sh"
+				;;
+			ts|typescript)
+				find_type ".ts"
+				;;
+			*)
+				log "Unknown language: '$lang', trying extension '.$lang'"
+				find_type ".$lang"
+				;;
+		esac
+	done
+}
+
 main() {
+	# Make sure all required cmds exist in this machine
 	need_cmd cat
 	need_cmd sort
 	need_cmd find
 
-	if [ "$#" -eq 0 ]; then
+	# Parse the arguments given to the run
+	parse_args "$@"
+
+	# If this is a -c run, clean defaults and exit
+	if [ "$CLEAR_DEFAULTS" -eq 1 ]; then
+		clear_defaults
+		exit 0
+	fi
+
+	# -s logic center:
+	if [ "$SAVE_DEFAULTS" -eq 1 ]; then
+		if [ "${#LANGS[@]}" -eq 0 ]; then # Stops -s from being used with no new defaults
+			err "-s ran with no new defaults given"
+		fi
+		save_defaults # Stores given languages as new default
+		log "Saving '${LANGS[*]}' as new default"
+	fi
+		
+	# If no langs in array yet, load from default file
+	if [ "${#LANGS[@]}" -eq 0 ]; then
+		load_defaults
+	fi
+
+	if [ "${#LANGS[@]}" -eq 0 ]; then # If there are STILL 0 languages in array, load every file
+		log "Running log for all files"
 		while IFS= read -r -d '' file; do
 			add_file "$file"
 		done < <(find . -maxdepth 1 -type f -print0)
 	else
-		for lang in "$@"; do
-			case "$lang" in
-				c)
-					find_type ".c"
-					find_type ".h"
-					;;
-				cpp|c++)
-					find_type ".h"
-					find_type ".cc"
-					find_type ".hh"
-					find_type ".cpp"
-					find_type ".hpp"
-					;;
-				py|python)
-					find_type ".py"
-					;;
-				sh|bash)
-					find_type ".sh"
-					;;
-				js|javascript)
-					find_type ".js"
-					;;
-				ts|typescript)
-					find_type ".ts"
-					;;
-				*)
-					err "Unknown language: $lang"
-					;;
-			esac
-		done
+		log "Running log for '${LANGS[*]}' files"
+		parse_langs # Otherwise, load files by parsing languages in array
 	fi
-	
-	if ! [ "${#FILES[@]}" -gt 0 ]; then
+
+	if [ "${#FILES[@]}" -eq 0 ]; then
 		warn "No matching files found"
 		exit 0
 	fi
