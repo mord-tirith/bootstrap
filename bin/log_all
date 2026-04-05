@@ -41,12 +41,20 @@ add_file() {
 	FILES+=("$file")
 }
 
+run_find() {
+	if [ "$MAX_DEPTH" -eq 0 ]; then
+		find . "${@}"
+	else
+		find . -maxdepth "$MAX_DEPTH" "${@}"
+	fi
+}
+
 find_type() {
 	local ext="$1"
 
 	while IFS= read -r -d '' file; do
 		add_file "$file"
-	done < <(find . -maxdepth "$MAX_DEPTH" -type f -name "*$ext" -print0)
+	done < <(run_find -type f -name "*$ext" -print0)
 }
 
 write_log() {
@@ -81,11 +89,32 @@ clear_defaults() {
 }
 
 parse_args() {
-	for arg in "$@"; do
-		case "$arg" in
-			-s|--save) SAVE_DEFAULTS=1 ;;
-			-c|--clean) CLEAR_DEFAULTS=1 ;;
-			*) LANGS+=("$arg") ;;
+
+	while [ "$#" -gt 0 ]; do
+		case "$1" in
+			-s|--save)
+				SAVE_DEFAULTS=1
+				shift
+				;;
+			-c|--clean)
+				CLEAR_DEFAULTS=1
+				shift
+				;;
+			-d|--depth|-maxdepth)
+				[ "$#" -ge 2 ] || err "-d expects a number"
+
+				case "$2" in
+					''|*[!0-9]*)
+						err "-d expects a non-negative integer"
+						;;
+				esac
+				MAX_DEPTH="$2"
+				shift 2
+				;;
+			*)
+				LANGS+=("$1")
+				shift
+				;;
 		esac
 	done
 	if [ "$SAVE_DEFAULTS" -eq 1 ] && [ "$CLEAR_DEFAULTS" -eq 1 ]; then
@@ -160,7 +189,7 @@ main() {
 		log "Running log for all files"
 		while IFS= read -r -d '' file; do
 			add_file "$file"
-		done < <(find . -maxdepth 1 -type f -print0)
+		done < <(run_find -type f -print0)
 	else
 		log "Running log for '${LANGS[*]}' files"
 		parse_langs # Otherwise, load files by parsing languages in array
