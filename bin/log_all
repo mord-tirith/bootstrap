@@ -88,10 +88,39 @@ clear_defaults() {
 	fi
 }
 
+usage() {
+	cat << EOF
+Usage: $0 [--save|-s] [--depth|-d] [--clean|-c] [--help|-h] (...)
+
+Creates and opens a file containing a text dump of all files in current directory,
+if given a programming language or specific extention, will limit itself only to those files
+
+Flags:
+	--save,		-s	Save listed languages for default behavior
+	--clean,	-c	Removes saved language
+	--depth,	-d	Specifies maximum depth of files searched
+				if left as 0 will find all possible files
+				in sub-directories
+	--help,		-h	Shows this help message
+
+	(...)			Anything written other than these flags
+				will be treated as languages or extensions
+				to be added.
+
+				"c" will result in .c and .h files being
+				added to the log, while ".c" will result
+				in just .c files being added
+EOF
+exit 0
+}
+
 parse_args() {
 
 	while [ "$#" -gt 0 ]; do
 		case "$1" in
+			-h|--help)
+				usage
+				;;
 			-s|--save)
 				SAVE_DEFAULTS=1
 				shift

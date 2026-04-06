@@ -50,10 +50,10 @@ and installs ~/.local/share/applications/kitty.desktop
 
 Flags:
   --verbose,	-v	Display info and warning messages
-  --quiet,	-q	Hides all output
-  --force,	-f	Forces kitty reinstallation
-  --launch,	-l	Launches kitty once installation finishes
-  --help,	-h	Shows this help message
+  --quiet,		-q	Hides all output
+  --force,		-f	Forces kitty reinstallation
+  --launch,		-l	Launches kitty once installation finishes
+  --help,		-h	Shows this help message
 EOF
 }
 
