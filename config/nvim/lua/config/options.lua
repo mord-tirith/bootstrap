@@ -1,5 +1,8 @@
 local opt = vim.opt
 
+-- True colors
+opt.termguicolors = true
+
 -- Line number
 opt.number = true
 opt.relativenumber = true

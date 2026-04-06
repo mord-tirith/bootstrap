@@ -71,3 +71,37 @@ end, { desc = "Colors: choose theme" })
 keymap("n", "<leader>cs", function()
 	require("config.colors").show_current()
 end, { desc = "Colors: show current theme" })
+
+-- Bufferline and Bufdelete keymaps
+keymap("n", "<S-h>", "<cmd>BufferLineCyclePrev<CR>", { desc = "Previous buffer" })
+keymap("n", "<S-l>", "<cmd>BufferLineCycleNext<CR>", { desc = "Next buffer" })
+
+keymap("n", "<leader>1", "<cmd>BufferLineGoToBuffer 1<CR>", { desc = "Go to buffer 1" })
+keymap("n", "<leader>2", "<cmd>BufferLineGoToBuffer 2<CR>", { desc = "Go to buffer 2" })
+keymap("n", "<leader>3", "<cmd>BufferLineGoToBuffer 3<CR>", { desc = "Go to buffer 3" })
+keymap("n", "<leader>4", "<cmd>BufferLineGoToBuffer 4<CR>", { desc = "Go to buffer 4" })
+
+keymap("n", "<leader>bp", "<cmd>BufferLinePick<CR>", { desc = "Pick buffer" })
+keymap("n", "<leader>bd", "<cmd>confirm Bdelete<CR>", { desc = "Close buffer" })
+keymap("n", "<leader>bqq", "<cmd>Bdelete!<CR>", { desc = "Force close buffer" })
+keymap("n", "<leader>bqa", "<cmd>confirm qall<CR>", { desc = "Close all buffers" })
+keymap("n", "<leader>bq!", "<cmd>qall!<CR>", { desc = "Force close all buffers" })
+keymap("n", "<leader>ba", "<cmd>wall<CR>", { desc = "Save all open buffers" })
+keymap("n", "<leader>bee", "<cmd>confirm quit<CR>", { desc = "Close Nvim" })
+keymap("n", "<leader>be!", "<cmd>quit!<CR>", { desc = "Force close Nvim" })
+
+-- Neotree keymaps
+keymap("n", "<leader>ee", "<cmd>Neotree filesystem toggle left<CR>", { desc = "Toggle file explorer" })
+keymap("n", "<leader>eb", "<cmd>Neotree buffers toggle right<CR>", { desc = "Toggle buffers explorer" })
+keymap("n", "<leader>er", "<cmd>Neotree filesystem reveal left<CR>", { desc = "Reveal current file" })
+
+-- : keymaps
+keymap("n", "<leader>:w", ":w<CR>", { desc = "Save buffer" })
+keymap("n", "<leader>:qq", ":q<CR>", { desc = "Close Nvim" })
+keymap("n", "<leader>:q!", ":q!<CR>", { desc = "Force close Nvim" })
+keymap("n", "<leader>:ee", ":e ", { desc = "Change open file" })
+keymap("n", "<leader>:e!", ":e! ", { desc = "Force change file" })
+keymap("n", "<leader>:ss", ":sav ", { desc = "Save/rename file" })
+keymap("n", "<leader>:s!", ":sav! ", { desc = "Force save/rename file" })
+
+
