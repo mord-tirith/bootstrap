@@ -108,8 +108,11 @@ Flags:
 				to be added.
 
 				"c" will result in .c and .h files being
-				added to the log, while ".c" will result
-				in just .c files being added
+				added to the log.
+
+				Not previously hardcoded arguments like
+				"MD" will default to searching for files
+				that have ".MD" extention.
 EOF
 exit 0
 }
