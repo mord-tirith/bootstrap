@@ -1,0 +1,394 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+MAX_DEPTH=0
+PARTIAL=0
+INCLUDE_HIDDEN=0
+CASE_SENSITIVE=0
+TERMS=()
+ALL_MATCHES=0
+SEP=$'\037'
+TERM_WIDTH=80
+LEFT_WIDTH=28
+RIGHT_WIDTH=20
+MIN_RIGHT_WIDTH=20
+COLOR=1
+COLOR_HEADER=""
+COLOR_MATCH=""
+COLOR_HIT=""
+COLOR_FILE=""
+COLOR_RESET=""
+USE_COMPACT=0
+HAS_PERL=0
+
+err() {
+	tput setaf 1
+	printf '[ERROR] '
+	tput sgr0
+	printf '%s\n' "$*" >&2
+	exit 1
+}
+
+warn() {
+	tput setaf 3
+	printf '[WARN] '
+	tput sgr0
+	printf '%s\n' "$*" >&2
+}
+
+log() {
+	tput setaf 51
+	printf '[INFO] '
+	tput sgr0
+	printf '%s\n' "$*" >&1
+}
+
+need_cmd() {
+	command -v "$1" >/dev/null 2>&1 || err "Required command not found: $1"
+}
+
+usage()
+{
+	cat << EOF
+	Usage: $0 words
+EOF
+	exit 0
+}
+
+parse_args() {
+	while [ "$#" -gt 0 ]; do
+		case "$1" in
+			-h|--help)
+				usage
+				;;
+			-p|--partial)
+				PARTIAL=1
+				shift
+				;;
+			-d|--depth|-maxdepth|--maxdepth)
+				[ "$#" -ge 2 ] || err "-d expects a number"
+				case "$2" in
+					''|*[!0-9]*)
+						err "-d expects a non-negative integer"
+						;;
+				esac
+				MAX_DEPTH="$2"
+				shift 2
+				;;
+			-H|--hidden)
+				INCLUDE_HIDDEN=1
+				shift
+				;;
+			-c|--case)
+				CASE_SENSITIVE=1
+				shift
+				;;
+			-a|--all)
+				ALL_MATCHES=1
+				shift
+				;;
+			--)
+				shift
+				while [ "$#" -gt 0 ]; do
+					TERMS+=("$1")
+					shift
+				done
+				;;
+			-*)
+				err "Unknown flag: $1"
+				;;
+			*)
+				TERMS+=("$1")
+				shift
+				;;
+		esac
+	done
+
+	[ "${#TERMS[@]}" -gt 0 ] || usage
+}
+
+setup_colors() {
+	if [ "$COLOR" -eq 1 ] && [ -t 1 ]; then
+		COLOR_HEADER="$(tput bold 2>/dev/null || true)$(tput setaf 6 2>/dev/null || true)"
+		COLOR_FILE="$(tput setaf 4 2>/dev/null || true)"
+		COLOR_MATCH="$(tput setaf 2 2>/dev/null || true)"
+		COLOR_HIT="$(tput bold 2>/dev/null || true)$(tput setaf 5 2>/dev/null || true)"
+		COLOR_RESET="$(tput sgr0 2>/dev/null || true)"
+	fi
+
+	return 0
+}
+
+setup_layout() {
+	if command -v tput >/dev/null 2>&1; then
+		TERM_WIDTH=$(tput cols 2>/dev/null || echo 80)
+	else
+		TERM_WIDTH=80
+	fi
+
+	USE_COMPACT=0
+
+	if [ "$TERM_WIDTH" -lt 40 ]; then
+		USE_COMPACT=1
+		return 0
+	fi
+
+	LEFT_WIDTH=28
+	RIGHT_WIDTH=$((TERM_WIDTH - LEFT_WIDTH - 3))
+
+	if [ "$RIGHT_WIDTH" -lt "$MIN_RIGHT_WIDTH" ]; then
+		RIGHT_WIDTH="$MIN_RIGHT_WIDTH"
+		LEFT_WIDTH=$((TERM_WIDTH - RIGHT_WIDTH - 3))
+	fi
+
+	if [ "$LEFT_WIDTH" -lt 10 ]; then
+		LEFT_WIDTH=10
+	fi
+	if [ "$RIGHT_WIDTH" -lt 10 ]; then
+		RIGHT_WIDTH=10
+	fi
+
+	return 0
+}
+
+trim_leading_ws() {
+	local s="$1"
+	s="${s#"${s%%[!$' \t']*}"}"
+	printf '%s' "$s"
+}
+
+highlight_terms() {
+	local text="$1"
+	local joined_terms
+	joined_terms=$(printf '%s\n' "${TERMS[@]}")
+
+	if [ "$HAS_PERL" -ne 1 ]; then
+		printf '%s' "$text"
+		return 0
+	fi
+
+	printf '%s' "$text" | \
+		CASE_SENSITIVE="$CASE_SENSITIVE" \
+		COLOR_HIT="$COLOR_HIT" \
+		COLOR_MATCH="$COLOR_MATCH" \
+		JOINED_TERMS="$joined_terms" \
+		perl -pe '
+			BEGIN {
+				$case_sensitive = $ENV{"CASE_SENSITIVE"} + 0;
+				$color_hit = $ENV{"COLOR_HIT"};
+				$color_match = $ENV{"COLOR_MATCH"};
+				@terms = grep { length($_) } split(/\n/, $ENV{"JOINED_TERMS"} // "");
+			}
+
+			for my $term (@terms) {
+				if ($case_sensitive) {
+					s/(\Q$term\E)/$color_hit$1$color_match/g;
+				} else {
+					s/(\Q$term\E)/$color_hit$1$color_match/ig;
+				}
+			}
+		'
+
+	return 0
+
+}
+
+print_header() {
+	if [ "$USE_COMPACT" -eq 1 ]; then
+		return
+	fi
+
+	local left_rule right_rule
+	left_rule="$(printf '%*s' "$LEFT_WIDTH" '' | tr ' ' '-')"
+	right_rule="$(printf '%*s' "$RIGHT_WIDTH" '' | tr ' ' '-')"
+
+	printf "%b%-*s%b | %b%s%b\n" \
+		"$COLOR_HEADER" "$LEFT_WIDTH" "FILE" "$COLOR_RESET" \
+		"$COLOR_HEADER" "MATCH" "$COLOR_RESET"
+
+	printf "%s-+-%s\n" "$left_rule" "$right_rule"
+}
+
+print_row() {
+	local left="$1"
+	local right="$2"
+	local first=1
+	local wrapped_line
+	local clean_right
+	local display_right
+
+	clean_right="$(trim_leading_ws "$right")"
+
+	if [ -n "$COLOR_HIT" ]; then
+		display_right="$(highlight_terms "$clean_right")"
+	else
+		display_right="$clean_right"
+	fi
+
+	if [ "$USE_COMPACT" -eq 1 ]; then
+		printf "%b%s%b\n" "$COLOR_FILE" "$left" "$COLOR_RESET"
+		printf "%b%s%b\n" "$COLOR_MATCH" "$display_right" "$COLOR_RESET"
+		printf '\n'
+		return 0
+	fi
+
+	while IFS= read -r wrapped_line; do
+		if [ "$first" -eq 1 ]; then
+			printf "%b%-*s%b | %b%s%b\n" \
+				"$COLOR_FILE" "$LEFT_WIDTH" "$left" "$COLOR_RESET" \
+				"$COLOR_MATCH" "$wrapped_line" "$COLOR_RESET"
+			first=0
+		else
+			printf "%-*s | %b%s%b\n" \
+				"$LEFT_WIDTH" "" \
+				"$COLOR_MATCH" "$wrapped_line" "$COLOR_RESET"
+		fi
+	done < <(printf '%s\n' "$display_right" | fold -s -w "$RIGHT_WIDTH")
+
+	return 0
+}
+
+make_find() {
+	if [ "$MAX_DEPTH" -eq 0 ]; then
+		if [ "$INCLUDE_HIDDEN" -eq 1 ]; then
+			find . -type f -print0
+		else
+			find . -type f ! -path '*/.*' ! -path '*/.*/*' -print0
+		fi
+	else
+		if [ "$INCLUDE_HIDDEN" -eq 1 ]; then
+			find . -maxdepth "$MAX_DEPTH" -type f -print0
+		else
+			find . -maxdepth "$MAX_DEPTH" -type f ! -path '*/.*' ! -path '*/.*/*' -print0
+		fi
+	fi
+}
+
+is_text_file() {
+	local file="$1"
+	grep -Iq . "$file" 2>/dev/null
+}
+
+search_file() {
+	local file="$1"
+	local joined_terms
+	joined_terms=$(printf '%s\n' "${TERMS[@]}")
+
+	awk \
+		-v file="$file" \
+		-v partial="$PARTIAL" \
+		-v case_sensitive="$CASE_SENSITIVE" \
+		-v joined_terms="$joined_terms" \
+		-v sep="$SEP" '
+	BEGIN {
+		n = split(joined_terms, raw_terms, "\n")
+		term_count = 0
+		for (i = 1; i <= n; i++) {
+			if (raw_terms[i] != "") {
+				term_count++
+				terms[term_count] = raw_terms[i]
+				if (!case_sensitive) {
+					terms[term_count] = tolower(terms[term_count])
+				}
+			}
+		}
+	}
+{
+	line_text = $0
+	check_text = $0
+
+	if (!case_sensitive) {
+		check_text = tolower(check_text)
+	}
+
+	matches = 0
+	for (i = 1; i <= term_count; i++) {
+		if (index(check_text, terms[i]) > 0) {
+			matches++
+		}
+	}
+
+	if ((partial && matches > 0) || (!partial && matches == term_count)) {
+		printf "%s%s%d%s%d%s%d%s%s\n", file, sep, FNR, sep, matches, sep, term_count, sep, line_text
+	}
+}
+' "$file"
+}
+
+collect_matches() {
+	local tmp_file="$1"
+	local file
+
+	while IFS= read -r -d '' file; do
+		if is_text_file "$file"; then
+			search_file "$file" >> "$tmp_file"
+		fi
+	done < <(make_find)
+
+	return 0
+}
+
+print_results() {
+	local tmp_file="$1"
+
+	if [ ! -s "$tmp_file" ]; then
+		printf 'No matches found for "%s%s%s"\n' "$COLOR_HIT" "${TERMS[*]}" "$COLOR_RESET"
+		return 0
+	fi
+
+	print_header
+
+	if [ "$PARTIAL" -eq 1 ]; then
+		if [ "$ALL_MATCHES" -eq 1 ]; then
+			sort -t "$SEP" -k3,3nr -k1,1 -k2,2n "$tmp_file" | \
+				while IFS="$SEP" read -r file line matches total text; do
+					print_row "${file}:${line}" "[$matches/$total] $(trim_leading_ws "$text")"
+				done
+		else
+			sort -t "$SEP" -k3,3nr -k1,1 -k2,2n "$tmp_file" | \
+				awk -F"$SEP" '!seen[$1]++' | \
+				while IFS="$SEP" read -r file line matches total text; do
+					print_row "${file}:${line}" "[$matches/$total] $(trim_leading_ws "$text")"
+				done
+		fi
+	else
+		if [ "$ALL_MATCHES" -eq 1 ]; then
+			sort -t "$SEP" -k1,1 -k2,2n "$tmp_file" | \
+				while IFS="$SEP" read -r file line matches total text; do
+					print_row "${file}:${line}" "$text"
+				done
+		else
+			sort -t "$SEP" -k1,1 -k2,2n "$tmp_file" | \
+				awk -F"$SEP" '!seen[$1]++' | \
+				while IFS="$SEP" read -r file line matches total text; do
+					print_row "${file}:${line}" "$text"
+				done
+		fi
+	fi
+}
+
+main() {
+	need_cmd find
+	need_cmd awk
+	need_cmd grep
+	need_cmd sort
+	need_cmd fold
+
+	if command -v perl > /dev/null 2>&1; then
+		HAS_PERL=1
+	fi
+
+	parse_args "$@"
+
+	local tmp_file
+	tmp_file="$(mktemp)" || err "Failed to create temp file"
+	trap "rm -f -- '$tmp_file'" EXIT
+
+	setup_layout
+	setup_colors
+	collect_matches "$tmp_file"
+	print_results "$tmp_file"
+	exit 0
+}
+
+main "$@"
