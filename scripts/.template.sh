@@ -32,6 +32,12 @@ err() {
 	return 0
 }
 
+need_cmd() {
+	command -v "$1" >/dev/null 2>&1 || {
+		err "Missing required command: $1"
+		exit 1
+	}
+}
 
 usage() {
 	cat <<EOF
@@ -58,7 +64,7 @@ parse_args() {
 				shift
 				;;
 			--quiet|-q)
-				if ["$VERBOSE" -eq 1 ]; then
+				if [ "$VERBOSE" -eq 1 ]; then
 					err "Can't run -v and -q at once"
 					exit 1
 				fi
