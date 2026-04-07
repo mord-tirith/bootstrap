@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MAX_DEPTH=0
+MAX_DEPTH=1
 PARTIAL=0
 INCLUDE_HIDDEN=0
 CASE_SENSITIVE=0
@@ -50,7 +50,34 @@ need_cmd() {
 usage()
 {
 	cat << EOF
-	Usage: $0 words
+Usage: $0 [flags] term [term ...]
+
+Scans text files on current directory for search term, showing
+first match on each file with an excerpt.
+
+Flags:
+	-a,		--all		show ALL matching lines on files instead
+						of just first match
+	-p,		--partial	in case of more than 1 term searched,
+						includes partial matches on output
+	-d,		--depth		choose depth of search (0 = unlimited)
+	-H,		--hidden	include hidden files and directories
+	-c,		--case		make search case-sensitive
+	-h,		--help		show this help
+
+Notes:
+	-	Multiple terms are matched literally, not as regex.
+	-	Terms with shell special characters should be quoted or escaped
+	-	Shell special characters given as single terms should be given
+		as first non-flag arguments, lest your output become poluted by
+		the symbols applied by formatting mid run of the command
+	Examples:
+	$0 hello				<- searches for the word 'hello'
+	$0 hello WoRlD --case	<- searches with case-sensitive active
+	$0 '['					<- searches for '['
+	$0 '[hello'				<- searches for '[hello'
+	$0 '[' hello -p			<- searches for either '[' or 'hello'
+	$0 hello '['			<- same as above, but can cause formatting issues
 EOF
 	exit 0
 }
