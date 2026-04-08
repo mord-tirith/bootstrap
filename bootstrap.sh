@@ -17,6 +17,7 @@ XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 
 KITTY_CONFIG_SOURCE="$INSTALL_DIR/config/kitty"
 KITTY_CONFIG_TARGET="$XDG_CONFIG_HOME/kitty"
+KITTY_THEME_TARGET="$KITTY_CONFIG_TARGET/current-theme.conf"
 
 ZSH_CONFIG_SOURCE="$INSTALL_DIR/zsh"
 ZSH_CONFIG_TARGET="$XDG_CONFIG_HOME/zsh"
@@ -176,6 +177,7 @@ relaunch_inside_kitty() {
 link_dir() {
 	local src="$1"
 	local dst="$2"
+	local current_link
 
 	if [ ! -d "$src" ]; then
 		err "Source directory not found: $src"
@@ -185,7 +187,6 @@ link_dir() {
 	mkdir -p "$(dirname "$dst")"
 
 	if [ -L "$dst" ]; then
-		local current_link
 		current_link="$(readlink "$dst")"
 		if [ "$current_link" = "$src" ] && [ "$FORCE" -eq 0 ]; then
 			ok "Already linked: $dst"
@@ -228,14 +229,46 @@ EOF
 	ok "Wrote zsh loader to $ZSH_LOADER_TARGET"
 }
 
+ensure_kitty_theme_file() {
+	if [ -f "$KITTY_THEME_TARGET" ] && [ "$FORCE" -eq 0 ]; then
+		return 0
+	fi
+
+	cat > "$KITTY_THEME_TARGET" <<'EOF'
+foreground            #f8f8f2
+background            #282a36
+selection_foreground  #f8f8f2
+selection_background  #44475a
+cursor                #f8f8f2
+cursor_text_color     #282a36
+
+color0  #21222c
+color1  #ff5555
+color2  #50fa7b
+color3  #f1fa8c
+color4  #bd93f9
+color5  #ff79c6
+color6  #8be9fd
+color7  #f8f8f2
+color8  #6272a4
+color9  #ff6e6e
+color10 #69ff94
+color11 #ffffa5
+color12 #d6acff
+color13 #ff92df
+color14 #a4ffff
+color15 #ffffff
+EOF
+
+	ok "Wrote default kitty theme to $KITTY_THEME_TARGET"
+}
+
 link_kitty_config() {
 	link_dir "$KITTY_CONFIG_SOURCE" "$KITTY_CONFIG_TARGET"
+	ensure_kitty_theme_file
 }
 
 link_zsh_config() {
-	if [ ! -f "$HOME/.zshrc" ]; then
-	       touch "$HOME/.zshrc"
-	fi
 	link_dir "$ZSH_CONFIG_SOURCE" "$ZSH_CONFIG_TARGET"
 	write_zsh_loader
 }
@@ -249,17 +282,14 @@ main() {
 
 	sync_repo_into_dotfiles
 
-	# install kitty first so the binary exists
 	run_step "$INSTALL_DIR/scripts/bootkitty.sh"
 
-	# prepare shell + kitty config BEFORE relaunching inside kitty
+	# must exist before kitty launches, otherwise zsh first-run prompt can block execution
 	link_zsh_config
 	link_kitty_config
 
-	# now relaunch safely
 	relaunch_inside_kitty
 
-	# continue remaining setup
 	run_step "$INSTALL_DIR/scripts/bootnvim.sh"
 	run_step "$INSTALL_DIR/scripts/linknvim.sh"
 	run_step "$INSTALL_DIR/scripts/linkbin.sh"
