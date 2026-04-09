@@ -12,9 +12,9 @@ alias	grm='git remove'
 alias	gc='git commit -m'
 
 # Movement aliases:
-alias	~='cd ~'
-alias	..='cd ..'
-alias	...='cd ../..'
+alias	~='cd ~ && ls'
+alias	..='cd .. && ls'
+alias	...='cd ../.. && ls'
 
 # 42 Stuff:
 alias	ccc='c -Wall -Wextra -Werror'
