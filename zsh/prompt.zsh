@@ -3,6 +3,7 @@ setopt PROMPT_SUBST
 export SHOW_HOST_IN_PROMPT="${SHOW_HOST_IN_PROMPT:-0}"
 export PROMPT_LEFT_KEEP="${PROMPT_LEFT_KEEP:-1}"
 export PROMPT_RIGHT_KEEP="${PROMPT_RIGHT_KEEP:-2}"
+export PROMPT_MAX_RATIO="${PROMPT_MAX_RATIO:-60}"   # max % of terminal width prompt may occupy
 
 toggle_hostname() {
 	if [ "${SHOW_HOST_IN_PROMPT:-0}" -eq 1 ]; then
@@ -54,7 +55,7 @@ build_path_segments() {
 		prefix="~"
 		rel="${cwd#$home/}"
 	else
-		prefix="/"
+		prefix=""
 		rel="${cwd#/}"
 	fi
 
@@ -90,7 +91,8 @@ build_path_segments() {
 		"$(join_path_parts "${right_parts[@]}")"
 }
 
-build_prompt_path() {
+render_path_mode() {
+	local mode="$1"
 	local path_color="%F{blue}"
 	local short_color="%F{green}"
 	local reset="%f"
@@ -101,6 +103,8 @@ build_prompt_path() {
 	local middle
 	local right
 
+	local out=""
+
 	raw="$(build_path_segments)"
 	prefix="${raw%%|*}"
 	raw="${raw#*|}"
@@ -109,17 +113,104 @@ build_prompt_path() {
 	middle="${raw%%|*}"
 	right="${raw#*|}"
 
-	if [ -n "$left" ] && [ -n "$middle" ] && [ -n "$right" ]; then
-		printf '%s%s/%s/%s%s/%s%s/%s%s' \
-			"$path_color" "$prefix" \
-			"$left" \
-			"$short_color" "$middle" "$reset" \
-			"$path_color" "$right" "$reset"
-	elif [ -n "$left" ]; then
-		printf '%s%s/%s%s' "$path_color" "$prefix" "$left" "$reset"
-	else
-		printf '%s%s%s' "$path_color" "$prefix" "$reset"
+	case "$mode" in
+		full|nohost)
+			if [ "$prefix" = "~" ]; then
+				out="${path_color}~"
+			else
+				out="${path_color}/"
+			fi
+
+			if [ -n "$left" ]; then
+				if [ "$prefix" = "~" ]; then
+					out="${out}/${left}"
+				else
+					out="${out}${left}"
+				fi
+			fi
+
+			if [ -n "$middle" ]; then
+				out="${out}/${short_color}${middle}${path_color}"
+			fi
+
+			if [ -n "$right" ]; then
+				out="${out}/${right}"
+			fi
+
+			out="${out}${reset}"
+			printf '%s' "$out"
+			;;
+
+		noleft)
+			out="${path_color}..."
+			if [ -n "$middle" ]; then
+				out="${out}/${short_color}${middle}${path_color}"
+			fi
+			if [ -n "$right" ]; then
+				out="${out}/${right}"
+			fi
+			out="${out}${reset}"
+			printf '%s' "$out"
+			;;
+
+		nomiddle)
+			out="${path_color}..."
+			if [ -n "$right" ]; then
+				out="${out}/${right}"
+			fi
+			out="${out}${reset}"
+			printf '%s' "$out"
+			;;
+
+		short)
+			local last=""
+			if [ -n "$right" ]; then
+				last="${right##*/}"
+			elif [ -n "$left" ]; then
+				last="${left##*/}"
+			fi
+
+			out="${path_color}..."
+			if [ -n "$last" ]; then
+				out="${out}/${last}"
+			fi
+			out="${out}${reset}"
+			printf '%s' "$out"
+			;;
+
+		arrow)
+			printf ''
+			;;
+	esac
+}
+
+strip_prompt_colors() {
+	local text="$1"
+	printf '%s' "$text" | sed -E 's/%([BFKfubk]|F\{[^}]+\}|K\{[^}]+\})//g'
+}
+
+prompt_limit() {
+	local cols ratio limit
+	cols="$(tput cols 2>/dev/null || printf '80')"
+	ratio="${PROMPT_MAX_RATIO:-40}"
+	limit=$(( cols * ratio / 100 ))
+
+	if [ "$limit" -lt 12 ]; then
+		limit=12
 	fi
+
+	printf '%d' "$limit"
+}
+
+fits_prompt() {
+	local candidate="$1"
+	local stripped
+	local limit
+
+	stripped="$(strip_prompt_colors "$candidate")"
+	limit="$(prompt_limit)"
+
+	[ "${#stripped}" -le "$limit" ]
 }
 
 build_prompt() {
@@ -127,7 +218,11 @@ build_prompt() {
 	local arrow_color
 	local host_color="%F{cyan}"
 	local reset="%f"
-	local path_part host_part=""
+
+	local host_part=""
+	local arrow_part
+	local path_part
+	local candidate
 
 	if [ "$last_status" -eq 0 ]; then
 		arrow_color="%F{green}"
@@ -135,13 +230,41 @@ build_prompt() {
 		arrow_color="%F{red}"
 	fi
 
-	path_part="$(build_prompt_path)"
+	arrow_part=" ${arrow_color}->${reset} "
 
 	if [ "${SHOW_HOST_IN_PROMPT:-0}" -eq 1 ]; then
 		host_part="${host_color}[%m]${reset} "
 	fi
 
-	PROMPT="${host_part}${path_part} ${arrow_color}->${reset} "
+	path_part="$(render_path_mode full)"
+	candidate="${host_part}${path_part}${arrow_part}"
+	if fits_prompt "$candidate"; then
+		PROMPT="$candidate"
+		return
+	fi
+
+	path_part="$(render_path_mode noleft)"
+	candidate="${path_part}${arrow_part}"
+	if fits_prompt "$candidate"; then
+		PROMPT="$candidate"
+		return
+	fi
+
+	path_part="$(render_path_mode nomiddle)"
+	candidate="${path_part}${arrow_part}"
+	if fits_prompt "$candidate"; then
+		PROMPT="$candidate"
+		return
+	fi
+
+	path_part="$(render_path_mode short)"
+	candidate="${path_part}${arrow_part}"
+	if fits_prompt "$candidate"; then
+		PROMPT="$candidate"
+		return
+	fi
+
+	PROMPT="${arrow_color}->${reset} "
 }
 
 precmd() {
