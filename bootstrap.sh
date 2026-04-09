@@ -293,6 +293,7 @@ main() {
 	run_step "$INSTALL_DIR/scripts/bootnvim.sh"
 	run_step "$INSTALL_DIR/scripts/linknvim.sh"
 	run_step "$INSTALL_DIR/scripts/linkbin.sh"
+	run_step "$INSTALL_DIR/scripts/packages.sh"
 
 	ok "Bootstrap complete"
 	ok "Repo: $INSTALL_DIR"

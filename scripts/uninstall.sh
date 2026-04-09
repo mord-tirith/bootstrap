@@ -10,6 +10,7 @@ REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
 TO_CLEAN_DIRS=(
 	"$HOME/.zshrc"
+	"$HOME/.dotfiles"
 	"$HOME/.config/zsh"
 	"$HOME/.cache/nvim"
 	"$HOME/.config/nvim"
