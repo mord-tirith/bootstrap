@@ -28,6 +28,7 @@ alias	diff='diff --color=auto'
 alias	themes='kitten themes'
 
 # Bootstuff:
+alias	pro_curl='~/.dotfiles/scripts/curler.sh'
 alias	boot_help='~/.dotfiles/bootstrap.sh -h'
 alias	boot_update='~/.dotfiles/bootstrap.sh -f'
 alias	boot_uninstall='~/.dotfiles/bootstrap.sh -u'
