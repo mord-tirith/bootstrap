@@ -1,8 +1,10 @@
 local keymap = vim.keymap.set
 local builtin = require("telescope.builtin")
 local tutorial = require("config.tutorial_state")
+local header = require("config.header_state")
 
 tutorial.load()
+header.load()
 
 local function explain(opts)
 	if tutorial.enabled then
@@ -94,6 +96,10 @@ keymap("n", "<leader>nh", function()
 		action = "Inserted 42 header",
 	})
 end, { desc = "42 Header" })
+
+keymap("n", "<leader>ns", function()
+	header.prompt_and_save()
+end, { desc = "Set header information" })
 
 keymap("n", "<leader>nn", function()
 	vim.notify("Press <F5> to run Norminette (must be installed in system)", vim.log.levels.INFO)
