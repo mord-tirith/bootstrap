@@ -1,13 +1,11 @@
 local keymap = vim.keymap.set
 local builtin = require("telescope.builtin")
-local tutorial = require("config.tutorial_state")
-local header = require("config.header_state")
+local state = require("config.config_state")
 
-tutorial.load()
-header.load()
+state.load()
 
 local function explain(opts)
-	if tutorial.enabled then
+	if state.values.tutorial_enabled then
 		if opts.tutorial then
 			vim.notify(opts.tutorial, vim.log.levels.INFO)
 		end
@@ -48,35 +46,14 @@ local diag_state = {
 	inline_warnings_enabled = true,
 }
 
-local function apply_diagnostic_virtual_text()
-	if not diag_state.inline_all_enabled then
-		vim.diagnostic.config({
-			virtual_text = false,
-		})
-		return
-	end
-
-	if diag_state.inline_warnings_enabled then
-		vim.diagnostic.config({
-			virtual_text = true,
-		})
-	else
-		vim.diagnostic.config({
-			virtual_text = {
-				severity = { min = vim.diagnostic.severity.ERROR },
-			},
-		})
-	end
-end
-
 keymap("n", "<leader>dw", function()
-	diag_state.inline_warnings_enabled = not diag_state.inline_warnings_enabled
-	apply_diagnostic_virtual_text()
+	local enabled = state.toggle("diag_inline_warnings")
+	vim.notify("Inline warnings " .. (enabled and "enabled" or "errors only"), vim.log.levels.INFO)
 end, { desc = "Toggle inline warnings" })
 
 keymap("n", "<leader>da", function()
-	diag_state.inline_all_enabled = not diag_state.inline_all_enabled
-	apply_diagnostic_virtual_text()
+	local enabled = state.toggle("diag_inline_all")
+	vim.notify("Inline diagnostics " .. (enabled and "enabled" or "disabled"), vim.log.levels.INFO)
 end, { desc = "Toggle all inline diagnostics" })
 
 -- Telescope configs
@@ -98,7 +75,7 @@ keymap("n", "<leader>nh", function()
 end, { desc = "42 Header" })
 
 keymap("n", "<leader>ns", function()
-	header.prompt_and_save()
+	state.prompt_header()
 end, { desc = "Set header information" })
 
 keymap("n", "<leader>nn", function()
@@ -139,7 +116,7 @@ keymap("n", "<leader>er", "<cmd>Neotree filesystem reveal left<CR>", { desc = "R
 
 -- : keymaps
 keymap("n", "<leader>:t", function()
-	local enabled = tutorial.toggle()
+	local enabled = state.toggle("tutorial_enabled")
 	vim.notify("Tutorial mode " .. (enabled and "enabled" or "disabled"), vim.log.levels.INFO)
 end, { desc = "Toggle tutorials" })
 
@@ -227,7 +204,7 @@ end, { desc = "Force save/rename file" })
 
 -- -- search commands:
 keymap("n", "<leader>st", function()
-	local enabled = tutorial.toggle()
+	local enabled = state.toggle("tutorial_enabled")
 	vim.notify("Tutorial mode " .. (enabled and "enabled" or "disabled"), vim.log.levels.INFO)
 end, { desc = "Toggle tutorials" })
 
@@ -362,8 +339,10 @@ keymap("n", "<leader>swc",
 )
 
 keymap("n", "<leader>swq", function()
-	vim.wo.number = not vim.wo.number
-	vim.wo.relativenumber = vim.wo.number
+	local enabled = state.toggle("number")
+	if enabled then
+		state.set("relativenumber", true)
+	end
 	explain({
 		tutorial = "You could have done: :set number!",
 		action = "Toggled line numbers",
@@ -371,7 +350,7 @@ keymap("n", "<leader>swq", function()
 end, { desc = "Toggle line numbers" })
 
 keymap("n", "<leader>swr", function()
-	vim.wo.relativenumber = not vim.wo.relativenumber
+	state.toggle("relativenumber")
 	explain({
 		tutorial = "You could have done: :set relativenumber!",
 		action = "Toggled relative line numbers",
@@ -379,7 +358,7 @@ keymap("n", "<leader>swr", function()
 end, { desc = "Toggle relative line numbers" })
 
 keymap("n", "<leader>sww", function()
-	vim.wo.wrap = not vim.wo.wrap
+	state.toggle("wrap")
 	explain({
 		tutorial = "You could have done: :set wrap!",
 		action = "Toggled wrapping",
@@ -387,7 +366,7 @@ keymap("n", "<leader>sww", function()
 end, { desc = "Toggle wrapping" })
 
 keymap("n", "<leader>sws", function()
-	vim.o.hlsearch = not vim.o.hlsearch
+	state.toggle("hlsearch")
 	explain({
 		tutorial = "You could have done: :set hlsearch!",
 		action = "Toggled search highlighting",
