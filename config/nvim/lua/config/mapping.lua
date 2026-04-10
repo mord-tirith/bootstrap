@@ -1,4 +1,31 @@
 local keymap = vim.keymap.set
+local builtin = require("telescope.builtin")
+local tutorial = require("config.tutorial_state")
+
+tutorial.load()
+
+local function explain(opts)
+	if tutorial.enabled then
+		if opts.tutorial then
+			vim.notify(opts.tutorial, vim.log.levels.INFO)
+		end
+	else
+		if opts.action then
+			vim.notify(opts.action, vim.log.levels.INFO)
+		end
+	end
+end
+
+local function feed_and_explain(keys, tutorial_msg, action_msg, mode)
+	return function()
+		local term = vim.api.nvim_replace_termcodes(keys, true, false, true)
+		vim.api.nvim_feedkeys(term, mode or "n", false)
+		explain({
+			tutorial = tutorial_msg,
+			action = action_msg,
+		})
+	end
+end
 
 -- Move line up or down with Alt + Arrow
 keymap("n", "<A-Up>", ":m . -2<CR>==")
@@ -10,7 +37,7 @@ keymap("v", "<A-Down>", ":m '>+1<CR>gv=gv")
 -- LSP keybinds
 keymap("n", "<leader>lk", vim.lsp.buf.hover, { desc = "LSP Hover" })
 keymap("n", "<leader>ld", vim.lsp.buf.definition, { desc = "LSP Jump to Definition" })
-keymap("n", "<leader>lr", vim.lsp.buf.rename, { desc = "LSP Rename Symbol" } )
+keymap("n", "<leader>lr", vim.lsp.buf.rename, { desc = "LSP Rename Symbol" })
 keymap("n", "<leader>la", vim.lsp.buf.code_action, { desc = "LSP Code Action" })
 
 -- Diagnostic Madness
@@ -26,6 +53,7 @@ local function apply_diagnostic_virtual_text()
 		})
 		return
 	end
+
 	if diag_state.inline_warnings_enabled then
 		vim.diagnostic.config({
 			virtual_text = true,
@@ -50,7 +78,6 @@ keymap("n", "<leader>da", function()
 end, { desc = "Toggle all inline diagnostics" })
 
 -- Telescope configs
-local builtin = require("telescope.builtin")
 keymap("n", "<leader>ff", builtin.find_files, { desc = "Find files" })
 keymap("n", "<leader>fg", builtin.live_grep, { desc = "Live grep" })
 keymap("n", "<leader>fb", builtin.buffers, { desc = "Find buffers" })
@@ -101,63 +128,263 @@ keymap("n", "<leader>eb", "<cmd>Neotree buffers toggle right<CR>", { desc = "Tog
 keymap("n", "<leader>er", "<cmd>Neotree filesystem reveal left<CR>", { desc = "Reveal current file" })
 
 -- : keymaps
-keymap("n", "<leader>:w", ":w<CR>", { desc = "Save buffer" })
-keymap("n", "<leader>:qq", ":q<CR>", { desc = "Close Nvim" })
-keymap("n", "<leader>:q!", ":q!<CR>", { desc = "Force close Nvim" })
-keymap("n", "<leader>:ee", ":e ", { desc = "Change open file" })
-keymap("n", "<leader>:e!", ":e! ", { desc = "Force change file" })
-keymap("n", "<leader>:ss", ":sav ", { desc = "Save/rename file" })
-keymap("n", "<leader>:s!", ":sav! ", { desc = "Force save/rename file" })
+keymap("n", "<leader>:t", function()
+	local enabled = tutorial.toggle()
+	vim.notify("Tutorial mode " .. (enabled and "enabled" or "disabled"), vim.log.levels.INFO)
+end, { desc = "Toggle tutorials" })
+
+keymap("n", "<leader>:w", function()
+	vim.cmd("w")
+	explain({
+		tutorial = "You could have done: :w",
+		action = "Saved current buffer",
+	})
+end, { desc = "Save buffer" })
+
+keymap("n", "<leader>:qq", function()
+	vim.cmd("q")
+	explain({
+		tutorial = "You could have done: :q",
+		action = "Closed current window",
+	})
+end, { desc = "Close Nvim" })
+
+keymap("n", "<leader>:q!", function()
+	vim.cmd("q!")
+	explain({
+		tutorial = "You could have done: :q!",
+		action = "Force-closed current window",
+	})
+end, { desc = "Force close Nvim" })
+
+keymap("n", "<leader>:ee", function()
+	vim.ui.input({ prompt = "Open file: " }, function(file)
+		if not file or file == "" then
+			return
+		end
+
+		vim.cmd("e " .. vim.fn.fnameescape(file))
+		explain({
+			tutorial = string.format("You could have done: :e %s", file),
+			action = string.format("Opened file: %s", file),
+		})
+	end)
+end, { desc = "Change open file" })
+
+keymap("n", "<leader>:e!", function()
+	vim.ui.input({ prompt = "Force open file: " }, function(file)
+		if not file or file == "" then
+			return
+		end
+
+		vim.cmd("e! " .. vim.fn.fnameescape(file))
+		explain({
+			tutorial = string.format("You could have done: :e! %s", file),
+			action = string.format("Force-opened file: %s", file),
+		})
+	end)
+end, { desc = "Force change file" })
+
+keymap("n", "<leader>:ss", function()
+	vim.ui.input({ prompt = "Save current buffer as: " }, function(file)
+		if not file or file == "" then
+			return
+		end
+
+		vim.cmd("sav " .. vim.fn.fnameescape(file))
+		explain({
+			tutorial = string.format("You could have done: :sav %s", file),
+			action = string.format("Saved buffer as: %s", file),
+		})
+	end)
+end, { desc = "Save/rename file" })
+
+keymap("n", "<leader>:s!", function()
+	vim.ui.input({ prompt = "Force save current buffer as: " }, function(file)
+		if not file or file == "" then
+			return
+		end
+
+		vim.cmd("sav! " .. vim.fn.fnameescape(file))
+		explain({
+			tutorial = string.format("You could have done: :sav! %s", file),
+			action = string.format("Force-saved buffer as: %s", file),
+		})
+	end)
+end, { desc = "Force save/rename file" })
 
 -- s keymaps: simplified commands
+
 -- -- search commands:
-keymap("n", "<leader>sss", "/", { desc = "Search text" } )
-keymap("n", "<leader>ssw", "*", { desc = "Search word under cursor" })
-keymap("n", "<leader>ssr", ":%s//g<Left><Left>", { desc = "Search and replace" })
+keymap("n", "<leader>st", function()
+	local enabled = tutorial.toggle()
+	vim.notify("Tutorial mode " .. (enabled and "enabled" or "disabled"), vim.log.levels.INFO)
+end, { desc = "Toggle tutorials" })
+
+
+keymap("n", "<leader>sss",
+	feed_and_explain("/", "You could have pressed: /", "Opened text search"),
+	{ desc = "Search text" }
+)
+
+keymap("n", "<leader>ssw",
+	feed_and_explain("*", "You could have pressed: *", "Searched for word under cursor"),
+	{ desc = "Search word under cursor" }
+)
+
+keymap("n", "<leader>ssr", function()
+	vim.ui.input({ prompt = "Replace target: " }, function(old)
+		if not old or old == "" then
+			return
+		end
+
+		vim.ui.input({ prompt = "Replace with: " }, function(new)
+			if new == nil then
+				return
+			end
+
+			local old_esc = vim.fn.escape(old, [[\/]])
+			local new_esc = vim.fn.escape(new, [[\/&]])
+			vim.cmd(string.format("%%s/%s/%s/g", old_esc, new_esc))
+
+			explain({
+				tutorial = string.format("You could have done: :%%s/%s/%s/g", old, new),
+				action = string.format("Replaced '%s' with '%s'", old, new),
+			})
+		end)
+	end)
+end, { desc = "Search and replace" })
+
 keymap("n", "<leader>ssb", builtin.current_buffer_fuzzy_find, { desc = "Search in buffer" })
 keymap("n", "<leader>ssg", builtin.live_grep, { desc = "Search in project" })
+
 -- -- jump commands:
 keymap("n", "<leader>svv", function()
 	vim.ui.input({ prompt = "Go to line: " }, function(input)
 		local line = tonumber(input)
 		if line then
 			vim.cmd(tostring(line))
+			explain({
+				tutorial = string.format("You could have done: :%d", line),
+				action = string.format("Jumped to line %d", line),
+			})
 		end
 	end)
 end, { desc = "Jump to line" })
-keymap("n", "<leader>svs", "^", { desc = "Jump to start of line" })
-keymap("n", "<leader>sve", "$", { desc = "Jump to end of line" })
-keymap("n", "<leader>svd", "<C-d>", { desc = "Jump half-page down" })
-keymap("n", "<leader>svt", "<C-u>", { desc = "Jump half-page up" })
-keymap("n", "<leader>svq", "<C-o>", { desc = "Jump back to tag" })
-keymap("n", "<leader>sva", "<C-i>", { desc = "Jump forward to tag" })
+
+keymap("n", "<leader>svs",
+	feed_and_explain("^", "You could have pressed: ^", "Moved to start of line"),
+	{ desc = "Jump to start of line" }
+)
+
+keymap("n", "<leader>sve",
+	feed_and_explain("$", "You could have pressed: $", "Moved to end of line"),
+	{ desc = "Jump to end of line" }
+)
+
+keymap("n", "<leader>svd",
+	feed_and_explain("<C-d>", "You could have pressed: <C-d>", "Moved half-page down"),
+	{ desc = "Jump half-page down" }
+)
+
+keymap("n", "<leader>svt",
+	feed_and_explain("<C-u>", "You could have pressed: <C-u>", "Moved half-page up"),
+	{ desc = "Jump half-page up" }
+)
+
+keymap("n", "<leader>svq",
+	feed_and_explain("<C-o>", "You could have pressed: <C-o>", "Jumped back"),
+	{ desc = "Jump back to tag" }
+)
+
+keymap("n", "<leader>sva",
+	feed_and_explain("<C-i>", "You could have pressed: <C-i>", "Jumped forward"),
+	{ desc = "Jump forward to tag" }
+)
+
 -- -- editor commands:
-keymap("n", "<leader>ser", vim.lsp.buf.rename, { desc = "Rename symbol" })
-keymap("n", "<leader>sec", "gcc", { desc = "Toggle comments" })
-keymap("v", "<leader>sec", "gc", { desc = "Toggle comment selection" })
-keymap("n", "<leader>sea", "ggVG", { desc = "Select all" })
-keymap("n", "<leader>sed", "yyp", { desc = "Duplicate line" })
-keymap("n", "<leader>sex", "dd", { desc = "Delete current line" })
-keymap("n", "<leader>set", "u", { desc = "Undo" })
-keymap("n", "<leader>seg", "<C-r>", { desc = "Redo" })
+keymap("n", "<leader>ser", function()
+	vim.lsp.buf.rename()
+	explain({
+		tutorial = "Native LSP action: vim.lsp.buf.rename()",
+		action = "Started symbol rename",
+	})
+end, { desc = "Rename symbol" })
+
+keymap("n", "<leader>sec", "gcc", { desc = "Toggle comments", remap = true })
+keymap("v", "<leader>sec", "gc", { desc = "Toggle comment selection", remap = true })
+
+keymap("n", "<leader>sea",
+	feed_and_explain("ggVG", "You could have pressed: ggVG", "Selected entire buffer"),
+	{ desc = "Select all" }
+)
+
+keymap("n", "<leader>sed",
+	feed_and_explain("yyp", "You could have pressed: yyp", "Duplicated current line"),
+	{ desc = "Duplicate line" }
+)
+
+keymap("n", "<leader>sex",
+	feed_and_explain("dd", "You could have pressed: dd", "Deleted current line"),
+	{ desc = "Delete current line" }
+)
+
+keymap("n", "<leader>set",
+	feed_and_explain("u", "You could have pressed: u", "Undid last change"),
+	{ desc = "Undo" }
+)
+
+keymap("n", "<leader>seg",
+	feed_and_explain("<C-r>", "You could have pressed: <C-r>", "Redid last undone change"),
+	{ desc = "Redo" }
+)
+
 -- -- code commands:
 keymap("n", "<leader>scd", vim.lsp.buf.definition, { desc = "Go to symbol definition" })
 keymap("n", "<leader>scc", vim.lsp.buf.implementation, { desc = "Go to symbol implementation" })
 keymap("n", "<leader>scr", vim.lsp.buf.references, { desc = "References" })
 keymap("n", "<leader>sce", builtin.lsp_document_symbols, { desc = "Document symbols" })
+
 -- -- toggle commands:
-keymap("n", "<leader>swc", "za", { desc = "Toggle fold" })
+keymap("n", "<leader>swc",
+	feed_and_explain("za", "You could have pressed: za", "Toggled fold under cursor"),
+	{ desc = "Toggle fold" }
+)
+
 keymap("n", "<leader>swq", function()
 	vim.wo.number = not vim.wo.number
 	vim.wo.relativenumber = vim.wo.number
+	explain({
+		tutorial = "You could have done: :set number!",
+		action = "Toggled line numbers",
+	})
 end, { desc = "Toggle line numbers" })
+
 keymap("n", "<leader>swr", function()
 	vim.wo.relativenumber = not vim.wo.relativenumber
+	explain({
+		tutorial = "You could have done: :set relativenumber!",
+		action = "Toggled relative line numbers",
+	})
 end, { desc = "Toggle relative line numbers" })
+
 keymap("n", "<leader>sww", function()
 	vim.wo.wrap = not vim.wo.wrap
+	explain({
+		tutorial = "You could have done: :set wrap!",
+		action = "Toggled wrapping",
+	})
 end, { desc = "Toggle wrapping" })
+
 keymap("n", "<leader>sws", function()
 	vim.o.hlsearch = not vim.o.hlsearch
+	explain({
+		tutorial = "You could have done: :set hlsearch!",
+		action = "Toggled search highlighting",
+	})
 end, { desc = "Toggle highlight search" })
 
+keymap("n", "<leader>swt", function()
+	local enabled = tutorial.toggle()
+	vim.notify("Tutorial mode " .. (enabled and "enabled" or "disabled"), vim.log.levels.INFO)
+end, { desc = "Toggle tutorial mode" })
