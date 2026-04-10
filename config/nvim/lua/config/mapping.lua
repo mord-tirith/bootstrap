@@ -374,6 +374,11 @@ keymap("n", "<leader>sws", function()
 end, { desc = "Toggle highlight search" })
 
 keymap("n", "<leader>swt", function()
-	local enabled = tutorial.toggle()
+	local enabled = state.toggle("tutorial_enabled")
 	vim.notify("Tutorial mode " .. (enabled and "enabled" or "disabled"), vim.log.levels.INFO)
-end, { desc = "Toggle tutorial mode" })
+end, { desc = "Toggle tutorials" })
+
+keymap("n", "<leader>swd", function()
+	state.reset()
+end, { desc = "Reset default configs" })
+
