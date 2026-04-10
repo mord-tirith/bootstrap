@@ -1,7 +1,6 @@
 # Everyday aliases:
-
-alias	ss='source ~/.zshrc'
 alias	v='nvim'
+alias	ss='source ~/.zshrc'
 
 # Github aliases:
 alias	ga='git add'
@@ -20,10 +19,15 @@ alias	...='cd ../.. && ls'
 alias	ccc='c -Wall -Wextra -Werror'
 
 # Any color you like:
+alias	tree='tree -C'
 alias	ls='ls --color=auto'
 alias	grep='grep --color=auto'
 alias	diff='diff --color=auto'
-alias	tree='tree -C'
 
 # Kitty stuff:
 alias	themes='kitten themes'
+
+# Bootstuff:
+alias	boot_help='~/.dotfiles/bootstrap.sh -h'
+alias	boot_update='~/.dotfiles/bootstrap.sh -f'
+alias	boot_uninstall='~/.dotfiles/bootstrap.sh -u'
