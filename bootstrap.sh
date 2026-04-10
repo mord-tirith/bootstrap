@@ -5,7 +5,6 @@ VERBOSE=0
 QUIET=0
 FORCE=0
 UNINSTALL=0
-INSIDE_KITTY=0
 
 ORIG_ARGS=("$@")
 FORWARDED_ARGS=()
@@ -47,7 +46,7 @@ warn() {
 
 err() {
 	printf '\033[1;31m[ERR]\033[0m %s\n' "$*" >&2
-	return 0
+	exit 1
 }
 
 usage() {
@@ -68,8 +67,6 @@ Flags:
   --uninstall, -u   Run uninstall script and exit
   --help,      -h   Show this help
 
-Internal:
-  --inside-kitty    Continue bootstrap from inside kitty
 EOF
 }
 
@@ -101,10 +98,6 @@ parse_args() {
 				;;
 			--uninstall|-u)
 				UNINSTALL=1
-				shift
-				;;
-			--inside-kitty)
-				INSIDE_KITTY=1
 				shift
 				;;
 			--help|-h)
@@ -146,32 +139,6 @@ sync_repo_into_dotfiles() {
 	log "Re-launching bootstrap from installed repo"
 
 	exec "$INSTALL_DIR/bootstrap.sh" "${ORIG_ARGS[@]}"
-}
-
-has_gui() {
-	[ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]
-}
-
-relaunch_inside_kitty() {
-	local kitty_bin="$HOME/.local/bin/kitty"
-
-	if [ "$INSIDE_KITTY" -eq 1 ]; then
-		return 0
-	fi
-
-	if ! has_gui; then
-		warn "No GUI session detected; continuing in current terminal"
-		return 0
-	fi
-
-	if [ ! -x "$kitty_bin" ]; then
-		warn "Kitty not found after install; continuing in current terminal"
-		return 0
-	fi
-
-	log "Relaunching bootstrap inside kitty"
-	"$kitty_bin" --detach "$INSTALL_DIR/bootstrap.sh" --inside-kitty "${FORWARDED_ARGS[@]}"
-	exit 0
 }
 
 link_dir() {
@@ -284,11 +251,8 @@ main() {
 
 	run_step "$INSTALL_DIR/scripts/bootkitty.sh"
 
-	# must exist before kitty launches, otherwise zsh first-run prompt can block execution
 	link_zsh_config
 	link_kitty_config
-
-	relaunch_inside_kitty
 
 	run_step "$INSTALL_DIR/scripts/bootnvim.sh"
 	run_step "$INSTALL_DIR/scripts/linknvim.sh"

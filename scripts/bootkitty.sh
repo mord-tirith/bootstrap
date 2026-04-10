@@ -4,7 +4,6 @@ set -euo pipefail
 VERBOSE=0
 QUIET=0
 FORCE=0
-LAUNCH=0
 
 PREFIX="${PREFIX:-$HOME/.local}"
 BIN_DIR="$PREFIX/bin"
@@ -37,12 +36,12 @@ warn(){
 err() {
 	[ "$QUIET" -eq 1 ] && return 0
 	printf '\033[1;31m[ERROR]\033[0m %s\n' "$*" >&2
-	return 0
+	exit 1
 }
 
 usage() {
 	cat <<EOF
-Usage: $0 [--verbose|-v] [--quiet|-q] [--force|-f] [--launch|-l] [--help|-h]
+Usage: $0 [--verbose|-v] [--quiet|-q] [--force|-f] [--help|-h]
 
 Installs or updates kitty to ~/.local/kitty.app,
 symlinks ~/.local/bin for kitty use,
@@ -52,7 +51,6 @@ Flags:
   --verbose,	-v	Display info and warning messages
   --quiet,		-q	Hides all output
   --force,		-f	Forces kitty reinstallation
-  --launch,		-l	Launches kitty once installation finishes
   --help,		-h	Shows this help message
 EOF
 }
@@ -70,7 +68,6 @@ parse_args() {
 			--verbose|-v) VERBOSE=1 ;;
 			--quiet|-q) QUIET=1 ;;
 			--force|-f) FORCE=1 ;;
-			--launch|-l) LAUNCH=1 ;;
 			--help|-h)
 				usage
 				exit 0
@@ -158,23 +155,6 @@ print_summary() {
 	ok "Desktop launcher:	$DESKTOP_FILE"
 }
 
-launch_kitty() {
-	ok "1: entered launch"
-	if [ "$LAUNCH" -ne 1 ]; then
-		return 0
-	fi
-	ok "2: launch flag was 1"
-	if [ ! -x "$KITTY_APP_DIR/bin/kitty" ]; then
-		err "Kitty executable not found"
-		exit 1
-	fi
-	ok "3: found kitty executable"
-	log "Launching kitty..."
-	setsid kitty >/dev/null 2>&1 &
-	exit 0
-	ok "4: somehow got past exit 0"
-}
-
 main() {
 	parse_args "$@"
 
@@ -188,7 +168,6 @@ main() {
 	link_binaries
 	install_desktop_file
 	print_summary
-	launch_kitty
 }
 
 main "$@"

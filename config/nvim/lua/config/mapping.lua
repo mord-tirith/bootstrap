@@ -60,8 +60,13 @@ keymap("n", "<leader>fh", builtin.help_tags, { desc = "Help tags" })
 keymap("n", "-", "<CMD>Oil --float<CR>", { desc = "Open parent directory" })
 
 -- 42 relevant stuff
-keymap("n", "<leader>nh", "<cmd>Stdheader<CR>", { desc = "Insert 42 header" })
-keymap("n", "<leader>nn", "<cmd>Norminette<CR>", { desc = "Run Norminette (requires norminette installed)" })
+keymap("n", "<leader>nh", function()
+	vim.notify("Press <F1> to insert 42 header", vim.log.levels.INFO)
+end, { desc = "42 Header" })
+
+keymap("n", "<leader>nn", function()
+	vim.notify("Press <F5> to run Norminette (must be installed in system)", vim.log.levels.INFO)
+end, { desc = "42 Norminette" })
 
 -- Colorscheme changer
 keymap("n", "<leader>cc", function()
@@ -104,4 +109,55 @@ keymap("n", "<leader>:e!", ":e! ", { desc = "Force change file" })
 keymap("n", "<leader>:ss", ":sav ", { desc = "Save/rename file" })
 keymap("n", "<leader>:s!", ":sav! ", { desc = "Force save/rename file" })
 
+-- s keymaps: simplified commands
+-- -- search commands:
+keymap("n", "<leader>sss", "/", { desc = "Search text" } )
+keymap("n", "<leader>ssw", "*", { desc = "Search word under cursor" })
+keymap("n", "<leader>ssr", ":%s//g<Left><Left>", { desc = "Search and replace" })
+keymap("n", "<leader>ssb", builtin.current_buffer_fuzzy_find, { desc = "Search in buffer" })
+keymap("n", "<leader>ssg", builtin.live_grep, { desc = "Search in project" })
+-- -- jump commands:
+keymap("n", "<leader>svv", function()
+	vim.ui.input({ prompt = "Go to line: " }, function(input)
+		local line = tonumber(input)
+		if line then
+			vim.cmd(tostring(line))
+		end
+	end)
+end, { desc = "Jump to line" })
+keymap("n", "<leader>svs", "^", { desc = "Jump to start of line" })
+keymap("n", "<leader>sve", "$", { desc = "Jump to end of line" })
+keymap("n", "<leader>svd", "<C-d>", { desc = "Jump half-page down" })
+keymap("n", "<leader>svt", "<C-u>", { desc = "Jump half-page up" })
+keymap("n", "<leader>svq", "<C-o>", { desc = "Jump back to tag" })
+keymap("n", "<leader>sva", "<C-i>", { desc = "Jump forward to tag" })
+-- -- editor commands:
+keymap("n", "<leader>ser", vim.lsp.buf.rename, { desc = "Rename symbol" })
+keymap("n", "<leader>sec", "gcc", { desc = "Toggle comments" })
+keymap("v", "<leader>sec", "gc", { desc = "Toggle comment selection" })
+keymap("n", "<leader>sea", "ggVG", { desc = "Select all" })
+keymap("n", "<leader>sed", "yyp", { desc = "Duplicate line" })
+keymap("n", "<leader>sex", "dd", { desc = "Delete current line" })
+keymap("n", "<leader>set", "u", { desc = "Undo" })
+keymap("n", "<leader>seg", "<C-r>", { desc = "Redo" })
+-- -- code commands:
+keymap("n", "<leader>scd", vim.lsp.buf.definition, { desc = "Go to symbol definition" })
+keymap("n", "<leader>scc", vim.lsp.buf.implementation, { desc = "Go to symbol implementation" })
+keymap("n", "<leader>scr", vim.lsp.buf.references, { desc = "References" })
+keymap("n", "<leader>sce", builtin.lsp_document_symbols, { desc = "Document symbols" })
+-- -- toggle commands:
+keymap("n", "<leader>swc", "za", { desc = "Toggle fold" })
+keymap("n", "<leader>swq", function()
+	vim.wo.number = not vim.wo.number
+	vim.wo.relativenumber = vim.wo.number
+end, { desc = "Toggle line numbers" })
+keymap("n", "<leader>swr", function()
+	vim.wo.relativenumber = not vim.wo.relativenumber
+end, { desc = "Toggle relative line numbers" })
+keymap("n", "<leader>sww", function()
+	vim.wo.wrap = not vim.wo.wrap
+end, { desc = "Toggle wrapping" })
+keymap("n", "<leader>sws", function()
+	vim.o.hlsearch = not vim.o.hlsearch
+end, { desc = "Toggle highlight search" })
 
