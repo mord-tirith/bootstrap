@@ -283,22 +283,22 @@ keymap("n", "<leader>sve",
 )
 
 keymap("n", "<leader>svd",
-	feed_and_explain("<C-d>", "You could have pressed: <C-d>", "Moved half-page down"),
+	feed_and_explain("<C-d>", "You could have pressed: Ctrl + d", "Moved half-page down"),
 	{ desc = "Jump half-page down" }
 )
 
 keymap("n", "<leader>svt",
-	feed_and_explain("<C-u>", "You could have pressed: <C-u>", "Moved half-page up"),
+	feed_and_explain("<C-u>", "You could have pressed: Ctrl + u", "Moved half-page up"),
 	{ desc = "Jump half-page up" }
 )
 
 keymap("n", "<leader>svq",
-	feed_and_explain("<C-o>", "You could have pressed: <C-o>", "Jumped back"),
+	feed_and_explain("<C-o>", "You could have pressed: Ctrl + o", "Jumped back"),
 	{ desc = "Jump back to tag" }
 )
 
 keymap("n", "<leader>sva",
-	feed_and_explain("<C-i>", "You could have pressed: <C-i>", "Jumped forward"),
+	feed_and_explain("<C-i>", "You could have pressed: Ctrl + i", "Jumped forward"),
 	{ desc = "Jump forward to tag" }
 )
 
@@ -335,7 +335,7 @@ keymap("n", "<leader>set",
 )
 
 keymap("n", "<leader>seg",
-	feed_and_explain("<C-r>", "You could have pressed: <C-r>", "Redid last undone change"),
+	feed_and_explain("<C-r>", "You could have pressed: Ctrl + r", "Redid last undone change"),
 	{ desc = "Redo" }
 )
 
