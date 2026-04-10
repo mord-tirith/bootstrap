@@ -13,8 +13,5 @@ return {
 	vim.keymap.set("n", "<F5>", function()
 		norm.check_norms()
 		end, { desc = "Update 42norms diagnostics", noremap = true, silent = true })
-	vim.keymap.set("n", "<F1>", function()
-			norm.stdheader()
-		end, { desc = "Insert 42 header", noremap = true, silent = true })
 	end,
 }

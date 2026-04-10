@@ -88,7 +88,11 @@ keymap("n", "-", "<CMD>Oil --float<CR>", { desc = "Open parent directory" })
 
 -- 42 relevant stuff
 keymap("n", "<leader>nh", function()
-	vim.notify("Press <F1> to insert 42 header", vim.log.levels.INFO)
+	vim.cmd("Stdheader")
+	explain({
+		tutorial = "You could have pressed <F1> or run :Stdheader",
+		action = "Inserted 42 header",
+	})
 end, { desc = "42 Header" })
 
 keymap("n", "<leader>nn", function()
