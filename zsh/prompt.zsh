@@ -196,41 +196,80 @@ render_path_mode() {
 }
 
 render_git_part() {
-	[ "$SHOW_GIT_IN_PROMPT" -eq 1 ] || return
+	[ "${SHOW_GIT_IN_PROMPT:-0}" -eq 1 ] || return
 
 	command git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return
 
 	local branch
 	local title
-	local porcelain
+	local status_output
+	local line
 	local git_color="%F{green}"
 	local reset="%f"
+
+	local has_unstaged=0
+	local has_staged=0
+	local has_untracked=0
+	local has_unmerged=0
+	local ahead=0
 
 	branch="$(command git symbolic-ref --quiet --short HEAD 2>/dev/null \
 		|| command git describe --tags --exact-match 2>/dev/null \
 		|| command git rev-parse --short HEAD 2>/dev/null)" || return
 
-	porcelain="$(command git status --porcelain 2>/dev/null)"
+	status_output="$(command git status --porcelain=v2 --branch 2>/dev/null)" || return
 
-	if [ "$branch" = "main" ]; then
-		title=""
-	elif [ "$branch" = "master" ]; then
+	if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then
 		title=""
 	else
 		title="b: "
 	fi
 
-	if [[ "$porcelain" == *"?? "* ]]; then
+	while IFS= read -r line; do
+		case "$line" in
+			'# branch.ab '*)
+				local ab
+				ab="${line#\# branch.ab}"
+				ahead="${ab%% *}"
+				ahead="${ahead#+}"
+				;;
+
+			'? '*)
+				has_untracked=1
+				;;
+
+			'u '*)
+				has_unmerged=1
+				;;
+
+			'1 '*|'2 '*)
+				local xy x y
+				xy="${line[3,4]}"
+				x="${xy[1,1]}"
+				y="${xy[2,2]}"
+
+				if [ "$x" != "." ]; then
+					has_staged=1
+				fi
+
+				if [ "$y" != "." ]; then
+					has_unstaged=1
+				fi
+				;;
+		esac
+	done <<< "$status_output"
+
+	if [ "$has_untracked" -eq 1 ] || [ "$has_unstaged" -eq 1 ] || [ "$has_unmerged" -eq 1 ]; then
 		git_color="%F{red}"
-	elif [[ "$porcelain" == [AMDRCU]* ]]; then
+	elif [ "$has_staged" -eq 1 ]; then
 		git_color="%F{yellow}"
-	elif [[ "$porcelain" == *"A "* || "$porcelain" == *"M "* ]]; then
+	elif [ "$ahead" -gt 0 ]; then
 		git_color="%F{blue}"
 	else
 		git_color="%F{green}"
 	fi
 
-	printf '%s[%s%s]%s' "$git_color" "$title" "$branch" "$reset"
+	printf '%s[%s%s]%s ' "$git_color" "$title" "$branch" "$reset"
 }
 
 strip_prompt_colors() {
