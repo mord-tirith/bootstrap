@@ -4,7 +4,8 @@ export SHOW_HOST_IN_PROMPT="${SHOW_HOST_IN_PROMPT:-0}"
 export SHOW_GIT_IN_PROMPT="${SHOW_GIT_IN_PROMPT:-1}"
 export PROMPT_LEFT_KEEP="${PROMPT_LEFT_KEEP:-1}"
 export PROMPT_RIGHT_KEEP="${PROMPT_RIGHT_KEEP:-2}"
-export PROMPT_MAX_RATIO="${PROMPT_MAX_RATIO:-60}"   # max % of terminal width prompt may occupy
+export PROMPT_MAX_RATIO="${PROMPT_MAX_RATIO:-70}"   # max % of terminal width prompt may occupy
+export GIT_PROMPT_MODE="${GIT_PROMPT_MODE:-1}"
 
 toggle_hostname() {
 	if [ "${SHOW_HOST_IN_PROMPT:-0}" -eq 1 ]; then
@@ -24,6 +25,29 @@ toggle_git() {
 		export SHOW_GIT_IN_PROMPT=1
 		echo "Git info shown"
 	fi
+}
+
+detail_git() {
+	local mode=""
+	case "${GIT_PROMPT_MODE:-1}" in
+		0)
+			mode="branch"
+			export GIT_PROMPT_MODE=1
+			;;
+		1)
+			mode="repository"
+			export GIT_PROMPT_MODE=2
+			;;
+		2)
+			mode="repository + branch"
+			export GIT_PROMPT_MODE=3
+			;;
+		*)
+			mode="git only"
+			export GIT_PROMPT_MODE=0
+			;;
+	esac
+	echo "Git prompt mode: $mode"
 }
 
 join_path_parts() {
@@ -201,6 +225,9 @@ render_git_part() {
 	command git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return
 
 	local branch
+	local repo
+	local top_level
+	local label
 	local title
 	local status_output
 	local line
@@ -212,24 +239,22 @@ render_git_part() {
 	local has_untracked=0
 	local has_unmerged=0
 	local ahead=0
+	local mode="${GIT_PROMPT_MODE:-1}"
 
 	branch="$(command git symbolic-ref --quiet --short HEAD 2>/dev/null \
 		|| command git describe --tags --exact-match 2>/dev/null \
 		|| command git rev-parse --short HEAD 2>/dev/null)" || return
 
-	status_output="$(command git status --porcelain=v2 --branch 2>/dev/null)" || return
+	top_level="$(command git rev-parse --show-toplevel 2>/dev/null)" || return
+	repo="${top_level:t}"
 
-	if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then
-		title=""
-	else
-		title="b: "
-	fi
+	status_output="$(command git status --porcelain=v2 --branch 2>/dev/null)" || return
 
 	while IFS= read -r line; do
 		case "$line" in
 			'# branch.ab '*)
 				local ab
-				ab="${line#\# branch.ab}"
+				ab="${line#\# branch.ab }"
 				ahead="${ab%% *}"
 				ahead="${ahead#+}"
 				;;
@@ -269,12 +294,33 @@ render_git_part() {
 		git_color="%F{green}"
 	fi
 
-	printf '%s[%s%s]%s ' "$git_color" "$title" "$branch" "$reset"
-}
+	case "$mode" in
+		0)
+			label="git"
+			;;
+		1)
+			if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then
+				label="$branch"
+			else
+				label="b: $branch"
+			fi
+			;;
+		2)
+			label="$repo"
+			;;
+		3)
+			label="$repo: $branch"
+			;;
+		*)
+			if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then
+				label="$branch"
+			else
+				label="b: $branch"
+			fi
+			;;
+	esac
 
-strip_prompt_colors() {
-	local text="$1"
-	printf '%s' "$text" | sed -E 's/%([BFKfubk]|F\{[^}]+\}|K\{[^}]+\})//g'
+	printf '%s[%s]%s ' "$git_color" "$label" "$reset"
 }
 
 prompt_limit() {
