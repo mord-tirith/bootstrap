@@ -1,6 +1,7 @@
 setopt PROMPT_SUBST
 
 export SHOW_HOST_IN_PROMPT="${SHOW_HOST_IN_PROMPT:-0}"
+export SHOW_GIT_IN_PROMPT="${SHOW_GIT_IN_PROMPT:-1}"
 export PROMPT_LEFT_KEEP="${PROMPT_LEFT_KEEP:-1}"
 export PROMPT_RIGHT_KEEP="${PROMPT_RIGHT_KEEP:-2}"
 export PROMPT_MAX_RATIO="${PROMPT_MAX_RATIO:-60}"   # max % of terminal width prompt may occupy
@@ -12,6 +13,16 @@ toggle_hostname() {
 	else
 		export SHOW_HOST_IN_PROMPT=1
 		echo "Hostname shown"
+	fi
+}
+
+toggle_git() {
+	if [ "${SHOW_GIT_IN_PROMPT:-0}" -eq 1 ]; then
+		export SHOW_GIT_IN_PROMPT=0
+		echo "Git info hidden"
+	else
+		export SHOW_GIT_IN_PROMPT=1
+		echo "Git info shown"
 	fi
 }
 
@@ -184,6 +195,42 @@ render_path_mode() {
 	esac
 }
 
+render_git_part() {
+	[ "$SHOW_GIT_IN_PROMPT" -eq 1 ] || return
+
+	command git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return
+
+	local branch
+	local title
+	local porcelain
+	local git_color="%F{green}"
+	local reset="%f"
+
+	branch="$(command git symbolic-ref --quiet --short HEAD 2>/dev/null \
+		|| command git describe --tags --exact-match 2>/dev/null \
+		|| command git rev-parse --short HEAD 2>/dev/null)" || return
+
+	porcelain="$(command git status --porcelain 2>/dev/null)"
+
+	if [ "$branch" = "main" ]; then
+		title=""
+	elif [ "$branch" = "master" ]; then
+		title=""
+	else
+		title="b: "
+	fi
+
+	if printf '%s\n' "$porcelain" | grep -q '^\?\? '; then
+		git_color="%F{red}"
+	elif [ -n "$porcelain" ]; then
+		git_color="%F{yellow}"
+	else
+		git_color="%F{green}"
+	fi
+
+	printf '%s[%s%s]%s' "$git_color" "$title" "$branch" "$reset"
+}
+
 strip_prompt_colors() {
 	local text="$1"
 	printf '%s' "$text" | sed -E 's/%([BFKfubk]|F\{[^}]+\}|K\{[^}]+\})//g'
@@ -219,6 +266,7 @@ build_prompt() {
 	local host_color="%F{cyan}"
 	local reset="%f"
 
+	local git_part=""
 	local host_part=""
 	local arrow_part
 	local path_part
@@ -235,36 +283,37 @@ build_prompt() {
 	if [ "${SHOW_HOST_IN_PROMPT:-0}" -eq 1 ]; then
 		host_part="${host_color}[%m]${reset} "
 	fi
-
+	
+	git_part="$(render_git_part)"
 	path_part="$(render_path_mode full)"
-	candidate="${host_part}${path_part}${arrow_part}"
+	candidate="${git_part}${host_part}${path_part}${arrow_part}"
 	if fits_prompt "$candidate"; then
 		PROMPT="$candidate"
 		return
 	fi
 
 	path_part="$(render_path_mode noleft)"
-	candidate="${path_part}${arrow_part}"
+	candidate="${git_part}${path_part}${arrow_part}"
 	if fits_prompt "$candidate"; then
 		PROMPT="$candidate"
 		return
 	fi
 
 	path_part="$(render_path_mode nomiddle)"
-	candidate="${path_part}${arrow_part}"
+	candidate="${git_part}${path_part}${arrow_part}"
 	if fits_prompt "$candidate"; then
 		PROMPT="$candidate"
 		return
 	fi
 
 	path_part="$(render_path_mode short)"
-	candidate="${path_part}${arrow_part}"
+	candidate="${git_part}${path_part}${arrow_part}"
 	if fits_prompt "$candidate"; then
 		PROMPT="$candidate"
 		return
 	fi
 
-	PROMPT="${arrow_color}->${reset} "
+	PROMPT="${git_part}${arrow_color}->${reset} "
 }
 
 precmd() {
