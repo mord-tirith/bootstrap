@@ -220,10 +220,12 @@ render_git_part() {
 		title="b: "
 	fi
 
-	if printf '%s\n' "$porcelain" | grep -q '^\?\? '; then
+	if [[ "$porcelain" == *"?? "* ]]; then
 		git_color="%F{red}"
-	elif [ -n "$porcelain" ]; then
+	elif [[ "$porcelain" == [AMDRCU]* ]]; then
 		git_color="%F{yellow}"
+	elif [[ "$porcelain" == *"A "* || "$porcelain" == *"M "* ]]; then
+		git_color="%F{blue}"
 	else
 		git_color="%F{green}"
 	fi
