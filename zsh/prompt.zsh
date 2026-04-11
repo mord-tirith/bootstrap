@@ -323,6 +323,11 @@ render_git_part() {
 	printf '%s[%s]%s ' "$git_color" "$label" "$reset"
 }
 
+strip_prompt_colors() {
+	local text="$1"
+	printf '%s' "$text" | sed -E 's/%([BFKfubk]|F\{[^}]+\}|K\{[^}]+\})//g'
+}
+
 prompt_limit() {
 	local cols ratio limit
 	cols="$(tput cols 2>/dev/null || printf '80')"
