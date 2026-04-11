@@ -1,11 +1,39 @@
 setopt PROMPT_SUBST
 
+export PROMPT_STATE_FILE="${PROMPT_STATE_FILE:-$HOME/.local/state/.zshstate}"
 export SHOW_HOST_IN_PROMPT="${SHOW_HOST_IN_PROMPT:-0}"
 export SHOW_GIT_IN_PROMPT="${SHOW_GIT_IN_PROMPT:-1}"
+export GIT_PROMPT_MODE="${GIT_PROMPT_MODE:-1}"
 export PROMPT_LEFT_KEEP="${PROMPT_LEFT_KEEP:-1}"
 export PROMPT_RIGHT_KEEP="${PROMPT_RIGHT_KEEP:-2}"
 export PROMPT_MAX_RATIO="${PROMPT_MAX_RATIO:-70}"   # max % of terminal width prompt may occupy
-export GIT_PROMPT_MODE="${GIT_PROMPT_MODE:-1}"
+
+
+load_prompt_state() {
+	local state_dir
+	state_dir="${PROMPT_STATE_FILE:h}"
+
+	mkdir -p "$state_dir" || return
+
+	if [ -f "$PROMPT_STATE_FILE" ]; then
+		source "$PROMPT_STATE_FILE"
+	else
+		save_prompt_state
+		source "$PROMPT_STATE_FILE"
+	fi
+}
+
+save_prompt_state() {
+	local tmp_file="${PROMPT_STATE_FILE}.tmp.$$"
+
+	{
+		printf 'export SHOW_HOST_IN_PROMPT=%q\n' "${SHOW_HOST_IN_PROMPT:-0}"
+		printf 'export SHOW_GIT_IN_PROMPT=%q\n' "${SHOW_GIT_IN_PROMPT:-1}"
+		printf 'export GIT_PROMPT_MODE=%q\n' "${GIT_PROMPT_MODE:-1}"
+	} >| "$tmp_file" && mv -f "$tmp_file" "$PROMPT_STATE_FILE"
+}
+
+load_prompt_state
 
 toggle_hostname() {
 	if [ "${SHOW_HOST_IN_PROMPT:-0}" -eq 1 ]; then
@@ -15,6 +43,7 @@ toggle_hostname() {
 		export SHOW_HOST_IN_PROMPT=1
 		echo "Hostname shown"
 	fi
+	save_prompt_state
 }
 
 toggle_git() {
@@ -25,6 +54,7 @@ toggle_git() {
 		export SHOW_GIT_IN_PROMPT=1
 		echo "Git info shown"
 	fi
+	save_prompt_state
 }
 
 detail_git() {
@@ -48,6 +78,7 @@ detail_git() {
 			;;
 	esac
 	echo "Git prompt mode: $mode"
+	save_prompt_state
 }
 
 join_path_parts() {
