@@ -14,6 +14,7 @@ opt.softtabstop = 4
 opt.expandtab = false
 
 -- QoL
+opt.autoindent = true
 opt.smartindent = true
 opt.wrap = false
 opt.cursorline = true

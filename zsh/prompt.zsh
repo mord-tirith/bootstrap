@@ -1,4 +1,5 @@
 setopt PROMPT_SUBST
+setopt TYPESET_SILENT
 
 export PROMPT_STATE_FILE="${PROMPT_STATE_FILE:-$HOME/.local/state/.zshstate}"
 export SHOW_HOST_IN_PROMPT="${SHOW_HOST_IN_PROMPT:-0}"
