@@ -11,6 +11,7 @@ alias	grm='git remove'
 alias	gc='git commit -m'
 
 # Movement aliases:
+alias	.='ls'
 alias	~='cd ~ && ls'
 alias	..='cd .. && ls'
 alias	...='cd ../.. && ls'
