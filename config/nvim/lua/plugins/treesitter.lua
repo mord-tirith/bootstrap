@@ -1,19 +1,15 @@
 return {
   "nvim-treesitter/nvim-treesitter",
   lazy = false,
-  build = ":TSUpdate",
+  build = function()
+    require("nvim-treesitter").install({ "lua", "python", "vim", "vimdoc", "c", "cpp" }):wait(300000)
+    vim.cmd("TSUpdate")
+  end,
   config = function()
-    local ts = require("nvim-treesitter")
-
-    ts.setup({
-      ensure_installed = { "lua", "python", "vim", "vimdoc" },
-      auto_install = true,
-    })
-
     vim.api.nvim_create_autocmd("FileType", {
-      pattern = { "lua", "python", "vim", "vimdoc" },
-      callback = function()
-        vim.treesitter.start()
+      pattern = { "lua", "python", "vim", "vimdoc", "c", "cpp" },
+      callback = function(args)
+        pcall(vim.treesitter.start, args.buf)
       end,
     })
 
