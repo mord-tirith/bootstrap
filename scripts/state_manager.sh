@@ -1,89 +1,451 @@
 #!/usr/bin/env bash
 
+# - # - # - # - # - # - #
+#  Variable Declaration #
+# - # - # - # - # - # - #
+
+# String variables
 STATE_FILE="$HOME/.local/state/state_machine.json"
+KITTY_THEME_FILE="${KITTY_THEME_FILE:-$HOME/.config/kitty/current-theme.conf}"
+
+# Numeric variables
+QUIET=0
 NUMERIC=0
+SILENT=0
 
+# Array variables
+ALLOWED_SET_KEYS=(
+	".ui.show_git"
+	".ui.hostname.show"
+	".ui.hostname.side"
+	".ui.time.show"
+	".ui.time.side"
+	".theme.error"
+	".theme.success"
+	".theme.warning"
+	".theme.contrast1"
+	".theme.contrast2"
+	".theme.contrast3"
+	".theme.blend1"
+	".theme.blend2"
+)
 
+ALLOWED_TOGGLE_KEYS=(
+	".ui.show_git"
+	".ui.hostname.show"
+	".ui.hostname.side"
+	".ui.time.show"
+	".ui.time.side"
+)
+
+# - # - # - #
+# Functions #
+# - # - # - #
+
+# Log print functions
 ok() {
+	[[ "$QUIET" -eq 0 && "$SILENT" -eq 0 ]] || return
 	tput setaf 51
-	printf '[OK]'
+	printf '[OK]' >&2
 	tput sgr0
-	printf ' %s' "$1"
+	printf ' %s' "$1" >&2
 	if [ "$#" -gt 1 ]; then
 		shift
 		tput setaf 51
-		printf ' %s\n' "$*"
+		printf ' %s\n' "$*" >&2
 		tput sgr0
 	else
-		printf '\n'
+		printf '\n' >&2
 	fi
-
 }
 
 err() {
 	tput setaf 1
-	printf '[ERROR]'
+	printf '[ERROR]' >&2
 	tput sgr0
-	printf ' %s' "$1"
+	printf ' %s' "$1" >&2
 	if [ "$#" -gt 1 ]; then
 		shift
 		tput setaf 1
-		printf ' %s\n' "$*"
+		printf ' %s\n' "$*" >&2
 		tput sgr0
 	else
-		printf '\n'
+		printf '\n' >&2
 	fi
 	exit 1
+}
+
+# File creating functions
+backup_state_file() {
+	local backup_dir="$HOME/.local/tmp/state_manager_backups"
+	local timestamp
+	local backup_file
+
+	timestamp="$(date +%Y-%m-%d_%H-%M-%S)"
+	backup_file="$backup_dir/state_machine_${timestamp}.json"
+
+	mkdir -p "$backup_dir" || err "Failed to create backup directory" "$backup_dir"
+	cp "$STATE_FILE" "$backup_file" || err "Failed to create backup file" "$backup_file"
+
+	printf '%s\n' "$backup_file"
 }
 
 create_state_file() {
 	local state_dir
 
 	state_dir="$(dirname "$STATE_FILE")"
-
 	mkdir -p "$state_dir"
 
-	cat > "$STATE_FILE" << 'EOF'
-	{
-		"ui": {
-			"show_git": true,
-			"show_host": false
+	cat > "$STATE_FILE" <<'EOF'
+{
+	"ui": {
+		"show_git": true,
+		"hostname": {
+			"show": true,
+			"side": "left"
 		},
-		"theme": {
-			"green": "#00ff00",
-			"red": "#ff0000"
-		}
+		"time": {
+			"show": false,
+			"side": "right"
+		} 
+	},
+	"theme": {
+		"error": "#ff0000",
+		"success": "#00ff00",
+		"warning": "#ffff00",
+		"contrast1": "#ff00ff",
+		"contrast2": "#00ffff",
+		"contrast3": "#ffffff",
+		"blend1": "#ff5555",
+		"blend2": "#55ff55"
 	}
+}
 EOF
 
 	ok "State machine created at" "$STATE_FILE"
 }
 
+# Helpers
+is_allowed_set_key() {
+	local candidate="$1"
+	local key
+
+	for key in "${ALLOWED_SET_KEYS[@]}"; do
+		if [[ "$candidate" == "$key" ]]; then
+			return 0
+		fi
+	done
+
+	return 1
+}
+
+is_allowed_toggle_key() {
+	local candidate="$1"
+	local key
+
+	for key in "${ALLOWED_TOGGLE_KEYS[@]}"; do
+		if [[ "$candidate" == "$key" ]]; then
+			return 0
+		fi
+	done
+
+	return 1
+}
+
+# - # - # - # - # - #
+# Getters & Setters #
+# - # - # - # - # - #
+
 get_json_value() {
 	local key="$1"
 	local value
 
-	value="$(jq -r ".${key}" "$STATE_FILE")" || err "jq failed while reading key" "$key"
+	value="$(jq -r "${key}" "$STATE_FILE")" || err "jq failed while reading key" "$key"
+
 	if [[ "$value" == "null" ]]; then
 		err "Key not found in state file" "$key"
 	fi
 
-	if [ "$NUMERIC" -eq 1 ]; then
-		if [[ "$value" == "true" ]]; then
+	if [[ "$NUMERIC" -eq 1 ]]; then
+		if [[ "$value" == "true" || "$value" == "right" ]]; then
 			value=1
-		elif [[ "$value" == "false" ]]; then
+		elif [[ "$value" == "false" || "$value" == "left" ]]; then
 			value=0
 		else
-			err "failed to simplify key's value to numerical representation:" "$key"
+			err "Failed to simplify key's value to numerical representation:" "$key"
 		fi
 	fi
 
 	printf '%s\n' "$value"
 }
 
+set_json_value() {
+	local key="$1"
+	local new_value="$2"
+	local tmp_file
+	local backup_path
+
+	is_allowed_set_key "$key" || err "Refusing to set unknown key" "$key"
+
+	tmp_file="$(mktemp)" || err "Failed to create temporary file"
+
+	if [[ "$new_value" =~ ^(true|false|null)$ ]] || [[ "$new_value" =~ ^-?[0-9]+([.][0-9]+)?$ ]]; then
+		jq --argjson value "$new_value" "${key} = \$value" "$STATE_FILE" > "$tmp_file" || {
+			rm -f "$tmp_file"
+			err "Failed to update key" "$key"
+		}
+	else
+		jq --arg value "$new_value" "${key} = \$value" "$STATE_FILE" > "$tmp_file" || {
+			rm -f "$tmp_file"
+			err "Failed to update key" "$key"
+		}
+	fi
+
+	jq empty "$tmp_file" > /dev/null 2>&1 || {
+		rm -f "$tmp_file"
+		err "Temporary file is not valid JSON"
+	}
+
+	jq -e "${key} != null" "$tmp_file" > /dev/null 2>&1 || {
+		rm -f "$tmp_file"
+		err "Updated key is missing or null after write" "$key"
+	}
+
+	backup_path="$(backup_state_file)" || {
+		rm -f "$tmp_file"
+		err "Failed to back up state file"
+	}
+
+	mv "$tmp_file" "$STATE_FILE" || {
+		rm -f "$tmp_file"
+		err "Failed to replace state file"
+	}
+
+	ok "Updated key" "$key" "Backup:" "$backup_path"
+}
+
+toggle_json_value() {
+	local key="$1"
+	local current_value
+	local new_value
+	local old_silent="$SILENT"
+
+	is_allowed_set_key "$key" || err "Refusing to toggle unknown key" "$key"
+	is_allowed_toggle_key "$key" || err "Refusing to toggle non-boolean key" "$key"
+
+	current_value="$(jq -r "${key}" "$STATE_FILE")" || err "jq failed while reading key" "$key"
+	if [[ "$current_value" == "null" ]]; then
+		err "Key not found in state file" "$key"
+	fi
+
+	case "$current_value" in
+		true)
+			new_value="false"
+			;;
+		false)
+			new_value="true"
+			;;
+		left)
+			new_value="right"
+			;;
+		right)
+			new_value="left"
+			;;
+		*)
+			err "Cannot toggle non-boolean key" "$key"
+			;;
+	esac
+
+	SILENT=1
+	set_json_value "$key" "$new_value"
+	SILENT="$old_silent"
+	ok "Toggled key" "$key"
+	ok "New value:" "$new_value"
+}
+
+set_theme_palette() {
+	local error="$1"
+	local success="$2"
+	local warning="$3"
+	local contrast1="$4"
+	local contrast2="$5"
+	local contrast3="$6"
+	local blend1="$7"
+	local blend2="$8"
+
+	local tmp_file
+	local backup_path
+
+	tmp_file="$(mktemp)" || err "Failed to create temporary file"
+
+	jq \
+		--arg error "$error" \
+		--arg success "$success" \
+		--arg warning "$warning" \
+		--arg contrast1 "$contrast1" \
+		--arg contrast2 "$contrast2" \
+		--arg contrast3 "$contrast3" \
+		--arg blend1 "$blend1" \
+		--arg blend2 "$blend2" \
+		'
+		.theme.error = $error |
+		.theme.success = $success |
+		.theme.warning = $warning |
+		.theme.contrast1 = $contrast1 |
+		.theme.contrast2 = $contrast2 |
+		.theme.contrast3 = $contrast3 |
+		.theme.blend1 = $blend1 |
+		.theme.blend2 = $blend2 
+		' \
+		"$STATE_FILE" > "$tmp_file" || {
+			rm -f "$tmp_file"
+			err "Failed to update theme palette"
+		}
+
+	jq -e '
+		.theme.error != null and
+		.theme.success != null and
+		.theme.warning != null and
+		.theme.contrast1 != null and
+		.theme.contrast2 != null and
+		.theme.contrast3 != null and
+		.theme.blend1 != null and
+		.theme.blend2 != null
+		' \
+		"$tmp_file" > /dev/null 2>&1 || {
+		rm -f "$tmp_file"
+		err "Updated theme palette is incomplete"
+	}
+
+	jq empty "$tmp_file" > /dev/null 2>&1 || {
+		rm -f "$tmp_file"
+		err "Temporary file is not valid JSON"
+	}
+	
+	backup_path="$(backup_state_file)" || {
+		rm -f "$tmp_file"
+		err "Failed to back up state file"
+	}
+
+	mv "$tmp_file" "$STATE_FILE" || {
+		rm -f "$tmp_file"
+		err "Failed to replace state file"
+	}
+
+	ok "Updated theme palette. Backup:" "$backup_path"
+}
+
+get_kitty_color() {
+	local file="$1"
+	local slot="$2"
+
+	[[ -f "$file" ]] || return 1
+
+	awk -v slot="$slot" '
+		$1 == slot && NF >= 2 {
+			print $2
+			exit
+		}
+	' "$file"
+}
+
+# - # - # - # - # - #
+#  Boot  functions  #
+# - # - # - # - # - #
+
+reset_json() {
+	if [[ -f "$STATE_FILE" ]]; then
+		backup_state_file >/dev/null
+	fi
+
+	rm -f "$STATE_FILE" || err "Could not remove existing state file"
+
+	create_state_file || err "Could not build state file"
+
+	ok "Created state file at" "$STATE_FILE"
+	exit 0
+}
+
+boot_colors_from_kitty() {
+	local kitty_file="$KITTY_THEME_FILE"
+	local color1 color2 color3 color5 color6 color7 color9 color10
+
+	[[ -f "$kitty_file" ]] || err "Kitty theme file not found at" "$kitty_file"
+
+	color1="$(get_kitty_color "$kitty_file" color1)"
+	color2="$(get_kitty_color "$kitty_file" color2)"
+	color3="$(get_kitty_color "$kitty_file" color3)"
+	color5="$(get_kitty_color "$kitty_file" color5)"
+	color6="$(get_kitty_color "$kitty_file" color6)"
+	color7="$(get_kitty_color "$kitty_file" color7)"
+	color9="$(get_kitty_color "$kitty_file" color9)"
+	color10="$(get_kitty_color "$kitty_file" color10)"
+
+	[[ -n "$color1" ]] || color1="#ff0000"
+	[[ -n "$color2" ]] || color2="#00ff00"
+	[[ -n "$color3" ]] || color3="#ffff00"
+	[[ -n "$color5" ]] || color5="#ff00ff"
+	[[ -n "$color6" ]] || color6="#00ffff"
+	[[ -n "$color7" ]] || color7="#ffffff"
+	[[ -n "$color9" ]] || color9="#ff5555"
+	[[ -n "$color10" ]] || color10="#55ff55"
+
+	set_theme_palette \
+		"$color1" \
+		"$color2" \
+		"$color3" \
+		"$color5" \
+		"$color6" \
+		"$color7" \
+		"$color9" \
+		"$color10"
+
+	ok "Bootstrapped theme colors from kitty's theme file" "$kitty_file"
+	exit 0
+}
+
+# - # - # - #
+# Main flow #
+# - # - # - #
+
+usage() {
+	cat <<EOF
+Usage:
+	$0 [-flags]
+Gets, sets, toggles and bootstraps various values on a
+state_machine.json file that the terminal will use for
+consistent behavior between executions.
+
+Options:
+	--get,			-g	Returns current value of a json key
+	--set,			-s	Sets a key to a new given value
+	--toggle,		-t	Toggles a boolean key between true/false
+						or a positional key between left/right
+	--bootstrap,		-b	Enforces json file existence while
+					setting it to default values
+	--boot-colors			Searches ${KITTY_THEME_FILE}
+					saving values seen there for terminal
+					theme values
+	--numeric,		-n	Simplifies boolean and positional keys
+					0 for 'false' and 'right' values,
+					1 for 'true' and 'left' values
+	--quiet,		-q	Suppress regular output
+	--locate,		-l	Prints path to state_machine.json file
+	--help,			-h	Show this help
+
+Examples:
+	$0 -g .ui.show_git
+	$0 -s .theme.contrast1 '#ffffff'
+	$0 -t .ui.hostname.show
+	$0 --boot-colors
+EOF
+	exit 0
+}
+
 parse_args() {
 	local action=""
 	local key=""
+	local new_value=""
 
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
@@ -93,6 +455,14 @@ parse_args() {
 				key="$2"
 				shift 2
 				;;
+			-s|--set)
+				[[ -n "${2:-}" ]] || err "Missing key for set operation"
+				[[ -n "${3:-}" ]] || err "Missing value for set operation"
+				action="set"
+				key="$2"
+				new_value="$3"
+				shift 3
+				;;
 			-n|--numeric)
 				NUMERIC=1
 				shift
@@ -101,11 +471,29 @@ parse_args() {
 				ok "State Machine located at" "$STATE_FILE"
 				exit 0
 				;;
-			"")
+			-q|--quiet)
+				QUIET=1
 				shift
 				;;
+			-t|--toggle)
+				[[ -n "${2:-}" ]] || err "Missing key for toggle operation"
+				action="toggle"
+				key="$2"
+				shift 2
+				;;
+			--boot-colors)
+				[[ "$action" == "" && "$#" -eq 1 ]] || err "This flag needs to run alone:" "--boot-colors"
+				boot_colors_from_kitty
+				;;
+			-b|--boot|--bootstrap|--rebuild|--reset)
+				[[ "$action" == "" && "$#" -eq 1 ]] || err "This flag needs to run alone:" "--bootstrap"
+				reset_json
+				;;
+			""|-h|--help)
+				usage
+				;;
 			*)
-				err "Unknown flag" "$1";
+				err "Unknown flag" "$1"
 				;;
 		esac
 	done
@@ -113,6 +501,12 @@ parse_args() {
 	case "$action" in
 		get)
 			get_json_value "$key"
+			;;
+		set)
+			set_json_value "$key" "$new_value"
+			;;
+		toggle)
+			toggle_json_value "$key"
 			;;
 		"")
 			err "No action specified"
@@ -124,10 +518,12 @@ parse_args() {
 }
 
 main() {
+	if [[ "$#" -eq 0 ]]; then
+		usage
+	fi
+
 	if [[ -d "$STATE_FILE" ]]; then
-		err "State file exists as dir at" "$STATE_FILE"
-	elif [[ ! -f "$STATE_FILE" ]]; then
-		create_state_file
+		err "State file exists as a dir at" "$STATE_FILE"
 	fi
 
 	parse_args "$@"
