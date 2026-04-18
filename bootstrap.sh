@@ -254,6 +254,7 @@ main() {
 	link_zsh_config
 	link_kitty_config
 
+	run_step "$INSTALL_DIR/scripts/state_manager.sh" -qr
 	run_step "$INSTALL_DIR/scripts/bootnvim.sh"
 	run_step "$INSTALL_DIR/scripts/linknvim.sh"
 	run_step "$INSTALL_DIR/scripts/linkbin.sh"
