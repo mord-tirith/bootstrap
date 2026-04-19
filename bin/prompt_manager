@@ -1,0 +1,343 @@
+#!/usr/bin/env bash
+
+set -u
+
+STATE_MANAGER="${HOME}/.dotfiles/scripts/state_manager.sh"
+
+C_HOSTNAME_SHOW=""
+C_HOSTNAME_SIDE=""
+C_GIT_SHOW=""
+C_DIR_SHOW=""
+C_DIR_SHORTEN=""
+C_DIR_MAX_RATIO=""
+C_TIME_SHOW=""
+C_TIME_SIDE=""
+
+THEME_SUCCESS=""
+THEME_ERROR=""
+THEME_WARNING=""
+THEME_HILIGHT1=""
+THEME_HILIGHT2=""
+THEME_HILIGHT3=""
+THEME_BLEND1=""
+THEME_BLEND2=""
+
+MENU_ITEMS=(
+	"hostname_show"
+	"hostname_side"
+	"git_show"
+	"dir_show"
+	"dir_shorten"
+	"dir_max_ratio"
+	"time_show"
+	"time_side"
+)
+
+selected=0
+
+prep_theme() {
+	THEME_SUCCESS="$(sm_get ".theme.success")"
+	THEME_ERROR="$(sm_get ".theme.error")"
+	THEME_WARNING="$(sm_get ".theme.warning")"
+	THEME_HILIGHT1="$(sm_get ".theme.contrast1")"
+	THEME_HILIGHT2="$(sm_get ".theme.contrast2")"
+	THEME_HILIGHT3="$(sm_get ".theme.contrast3")"
+	THEME_BLEND1="$(sm_get ".theme.blend1")"
+	THEME_BLEND2="$(sm_get ".theme.blend2")"
+}
+
+hex_to_rgb() {
+	local hex="${1#\#}"
+	printf '%d;%d;%d' "0x${hex:0:2}" "0x${hex:2:2}" "0x${hex:4:2}"
+}
+
+fg_color() {
+	local rgb
+	rgb="$(hex_to_rgb "$1")"
+	printf '\033[38;2;%sm' "$rgb"
+}
+
+reset_color() {
+	printf '\033[0m'
+}
+
+cleanup() {
+	tput cnorm 2>/dev/null || true
+	tput sgr0 2>/dev/null || true
+	clear
+}
+
+trap cleanup EXIT
+
+sm_get() {
+	"$STATE_MANAGER" -g "$1" -q 2>/dev/null
+}
+
+sm_get_num() {
+	"$STATE_MANAGER" -g "$1" -n -q 2>/dev/null
+}
+
+sm_toggle() {
+	"$STATE_MANAGER" -t "$1" -q >/dev/null 2>&1
+}
+
+sm_set() {
+	"$STATE_MANAGER" -s "$1" "$2" -q >/dev/null 2>&1
+}
+
+get_item_label() {
+	case "$1" in
+		hostname_show) echo "Display Hostname" ;;
+		hostname_side) echo "Hostname Side" ;;
+		git_show) echo "Display Git" ;;
+		dir_show) echo "Display Directory" ;;
+		dir_shorten) echo "Shorten Directory" ;;
+		dir_max_ratio) echo "Max Directory width %";;
+		time_show) echo "Display Time" ;;
+		time_side) echo "Time Side" ;;
+	esac
+}
+
+get_item_value() {
+	case "$1" in
+		hostname_show)	sm_get_num ".ui.hostname.show" ;;
+		hostname_side)	sm_get ".ui.hostname.side" ;;
+		git_show)		sm_get_num ".ui.git.show" ;;
+		dir_show)		sm_get_num ".ui.dir.show" ;;
+		dir_shorten)	sm_get_num ".ui.dir.shorten" ;;
+		dir_max_ratio)	sm_get ".ui.dir.max_ratio" ;;
+		time_show)		sm_get_num ".ui.time.show" ;;
+		time_side)		sm_get ".ui.time.side" ;;
+	esac
+}
+
+render_bool() {
+	if [[ "$1" == "1" ]]; then
+		printf '[*]'
+	else
+		printf '[ ]'
+	fi
+}
+
+visible_length() {
+	local text="$1"
+
+	printf '%s' "$text" | sed -E $'s/\x1b\\[0-9;]*m//g' | wc -c | tr -d ' '
+}
+
+refresh_state_cache() {
+	C_HOSTNAME_SHOW="$(sm_get_num ".ui.hostname.show")"
+	C_HOSTNAME_SIDE="$(sm_get ".ui.hostname.side")"
+	C_GIT_SHOW="$(sm_get_num ".ui.git.show")"
+	C_DIR_SHOW="$(sm_get_num ".ui.dir.show")"
+	C_DIR_SHORTEN="$(sm_get_num ".ui.dir.shorten")"
+	C_DIR_MAX_RATIO="$(sm_get ".ui.dir.max_ratio")"
+	C_TIME_SHOW="$(sm_get_num ".ui.time.show")"
+	C_TIME_SIDE="$(sm_get ".ui.time.side")"
+}
+
+build_preview() {
+	local left="" right="" dir_text=""
+	local C_HOST C_GIT C_DIR C_TIME C_ARROW C_RESET
+
+	C_HOST="$(fg_color "$THEME_WARNING")"
+	C_GIT="$(fg_color "$THEME_BLEND1")"
+	C_DIR="$(fg_color "$THEME_HILIGHT2")"
+	C_TIME="$(fg_color "$THEME_HILIGHT1")"
+	C_ARROW="$(fg_color "$THEME_SUCCESS")"
+	C_RESET="$(reset_color)"
+
+	if [[ "$C_DIR_SHOW" == "1" ]]; then
+		if [[ "$C_DIR_SHORTEN" == "1" ]]; then
+			if (( C_DIR_MAX_RATIO <= 15 )); then
+				dir_text="dir"
+			elif (( C_DIR_MAX_RATIO <= 30 )); then
+				dir_text="previous_dir/dir"
+			else
+				dir_text="~/Mother_Dir/previous_dir/dir"
+			fi
+		else
+			dir_text="~/Mother_Dir/previous_dir/dir"
+		fi
+	fi
+
+	if [[ "$C_HOSTNAME_SHOW" == "1" ]]; then
+		if [[ "$C_HOSTNAME_SIDE" == "left" ]]; then
+			left="${left}${C_HOST}[MyHostname]${C_RESET}"
+		else
+			right="${right}${C_HOST}[MyHostname]${C_RESET}"
+		fi
+	fi
+
+	if [[ "$C_GIT_SHOW" == "1" ]]; then
+		left="${left}${C_GIT}[my-git-repository]${C_RESET}"
+	fi
+
+	if [[ "$C_TIME_SHOW" == "1" ]]; then
+		if [[ "$C_TIME_SIDE" == "left" ]]; then
+			left="${left}${C_TIME}[10:10]${C_RESET}"
+		else
+			right="${right}${C_TIME}<10:10:10>${C_RESET}"
+		fi
+	fi
+
+	left="${left}${C_DIR}${dir_text}${C_ARROW}->${C_RESET}"
+
+	printf '%s\n' "$left"
+	if [[ -n "$right" ]]; then
+		local right_len=$(visible_length "$right")
+		local pad=$(( COLUMNS - right_len ))
+		(( pad < 0 )) && pad=0
+		printf '%*s%s\n' "$pad" '' "$right"
+	fi
+}
+
+toggle_selected() {
+	case "${MENU_ITEMS[$selected]}" in
+		hostname_show)
+			sm_toggle ".ui.hostname.show"
+			if [[ "$C_HOSTNAME_SHOW" == "1" ]]; then C_HOSTNAME_SHOW="0"; else C_HOSTNAME_SHOW="1"; fi
+			;;
+		git_show)
+			sm_toggle ".ui.git.show"
+			if [[ "$C_GIT_SHOW" == "1" ]]; then C_GIT_SHOW="0"; else C_GIT_SHOW="1"; fi
+			;;
+		dir_show)
+			sm_toggle ".ui.dir.show"
+			if [[ "$C_DIR_SHOW" == "1" ]]; then C_DIR_SHOW="0"; else C_DIR_SHOW="1"; fi
+			;;
+		dir_shorten)
+			sm_toggle ".ui.dir.shorten"
+			if [[ "$C_DIR_SHORTEN" == "1" ]]; then C_DIR_SHORTEN="0"; else C_DIR_SHORTEN="1"; fi
+			;;
+		time_show)
+			sm_toggle ".ui.time.show"
+			if [[ "$C_TIME_SHOW" == "1" ]]; then C_TIME_SHOW="0"; else C_TIME_SHOW="1"; fi
+			;;
+		hostname_side)
+			sm_toggle ".ui.hostname.side"
+			if [[ "$C_HOSTNAME_SIDE" == "left" ]]; then C_HOSTNAME_SIDE="right"; else C_HOSTNAME_SIDE="left"; fi
+			;;
+		time_side)
+			sm_toggle ".ui.time.side"
+			if [[ "$C_TIME_SIDE" == "left" ]]; then C_TIME_SIDE="right"; else C_TIME_SIDE="left"; fi
+			;;
+	esac
+}
+
+adjust_selected() {
+	local direction="$1"
+	local current next
+
+	case "${MENU_ITEMS[$selected]}" in
+		hostname_side)
+			sm_toggle ".ui.hostname.side"
+			;;
+		time_side)
+			sm_toggle ".ui.time.side"
+			;;
+		dir_max_ratio)
+			current="$(sm_get ".ui.dir.max_ratio")"
+			if [[ "$direction" == "up" ]]; then
+				next=$(( current + 5 ))
+			else
+				next=$(( current - 5 ))
+			fi
+			
+			(( next < 10 )) && next=10
+			(( next > 95 )) && next=95
+
+			sm_set ".ui.dir.max_ratio" "$next"
+			;;
+	esac
+}
+
+render_screen() {
+	local i item label value marker prefix
+	local screen=""
+
+	screen+="Prompt Manager"$'\n'
+	screen+="=============="$'\n\n'
+
+	for i in "${!MENU_ITEMS[@]}"; do
+		item="${MENU_ITEMS[$i]}"
+		label="$(get_item_label "$item")"
+		value="$(get_item_value "$item")"
+
+		if [[ "$i" -eq "$selected" ]]; then
+			prefix="> "
+		else
+			prefix="  "
+		fi
+
+		case "$item" in
+			hostname_show|git_show|dir_show|dir_shorten|time_show)
+				marker="$(render_bool "$value")"
+				screen+="${prefix}${marker} ${label}"$'\n'
+				;;
+			hostname_side|time_side)
+				screen+="${prefix}[${value}] ${label}"$'\n'
+				;;
+			dir_max_ratio)
+				screen+="${prefix}[${value}%] ${label}"$'\n'
+				;;
+		esac
+	done
+
+	screen+=$'\n'
+	screen+="Preview"$'\n'
+	screen+="========="$'\n'
+	screen+="$(build_preview)"$'\n'
+	screen+=$'\n'
+	screen+="Controls: j/k move  space toggle  h/l switch side  +/- adjust  q quit"$'\n'
+
+	tput cup 0 0
+	tput ed
+	printf '%s' "$screen"
+}
+
+main_loop() {
+	local key rest
+
+	tput civis 2>/dev/null || true
+
+	refresh_state_cache
+	prep_theme
+
+	while true; do
+		render_screen
+		IFS= read -rsn1 key
+
+		if [[ "$key" == $'\e' ]]; then
+			if IFS= read -rsN2 -t 0.01 rest 2>/dev/null; then
+				key+="$rest"
+			fi
+		fi
+
+		case "$key" in
+			q)
+				break
+				;;
+			j|$'\e[B')
+				(( selected < ${#MENU_ITEMS[@]} - 1 )) && (( selected++ ))
+				;;
+			k|$'\e[A')
+				(( selected > 0 )) && (( selected-- ))
+				;;
+			" ")
+				toggle_selected
+				;;
+			h|-|$'\e[D')
+				adjust_selected "down"
+				;;
+			l|+|$'\e[C')
+				adjust_selected "up"
+				;;
+			*)
+				continue
+				;;
+		esac
+	done
+}
+
+main_loop

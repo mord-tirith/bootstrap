@@ -15,7 +15,7 @@ SILENT=0
 
 # Array variables
 ALLOWED_SET_KEYS=(
-	".ui.show_git"
+	".ui.git.show"
 	".ui.hostname.show"
 	".ui.hostname.side"
 	".ui.time.show"
@@ -28,10 +28,15 @@ ALLOWED_SET_KEYS=(
 	".theme.contrast3"
 	".theme.blend1"
 	".theme.blend2"
+	".ui.dir.shorten"
+	".ui.dir.show"
+	".ui.dir.max_ratio"
 )
 
 ALLOWED_TOGGLE_KEYS=(
-	".ui.show_git"
+	".ui.dir.show"
+	".ui.dir.shorten"
+	".ui.git.show"
 	".ui.hostname.show"
 	".ui.hostname.side"
 	".ui.time.show"
@@ -45,15 +50,15 @@ ALLOWED_TOGGLE_KEYS=(
 # Log print functions
 ok() {
 	[[ "$QUIET" -eq 0 && "$SILENT" -eq 0 ]] || return 0
-	tput setaf 51
+	tput setaf 51 >&2
 	printf '[OK]' >&2
-	tput sgr0
+	tput sgr0 >&2
 	printf ' %s' "$1" >&2
 	if [ "$#" -gt 1 ]; then
 		shift
-		tput setaf 51
+		tput setaf 51 >&2
 		printf ' %s\n' "$*" >&2
-		tput sgr0
+		tput sgr0 >&2
 	else
 		printf '\n' >&2
 	fi
@@ -61,15 +66,15 @@ ok() {
 }
 
 err() {
-	tput setaf 1
+	tput setaf 1 >&2
 	printf '[ERROR]' >&2
-	tput sgr0
+	tput sgr0 >&2
 	printf ' %s' "$1" >&2
 	if [ "$#" -gt 1 ]; then
 		shift
-		tput setaf 1
+		tput setaf 1 >&2
 		printf ' %s\n' "$*" >&2
-		tput sgr0
+		tput sgr0 >&2
 	else
 		printf '\n' >&2
 	fi
@@ -100,7 +105,14 @@ create_state_file() {
 	cat > "$STATE_FILE" <<'EOF'
 {
 	"ui": {
-		"show_git": true,
+		"git": {
+			"show": true
+		},
+		"dir": {
+			"show": true,
+			"shorten": true,
+			"max_ratio": 40
+		},
 		"hostname": {
 			"show": true,
 			"side": "left"
