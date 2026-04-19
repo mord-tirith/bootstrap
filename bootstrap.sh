@@ -245,6 +245,7 @@ prep_state_manager() {
 
 	$("$sm" -b -q)
 	$("$sm" --boot-colors -q)
+	ok "Installed state manager json file"
 }
 
 main() {
@@ -256,6 +257,7 @@ main() {
 
 	sync_repo_into_dotfiles
 
+	prep_state_manager
 	run_step "$INSTALL_DIR/scripts/bootkitty.sh"
 
 	link_zsh_config
@@ -266,7 +268,6 @@ main() {
 	run_step "$INSTALL_DIR/scripts/linkbin.sh"
 	run_step "$INSTALL_DIR/scripts/packages.sh"
 
-	prep_state_manager
 
 	ok "Bootstrap complete"
 	ok "Repo: $INSTALL_DIR"

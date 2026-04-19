@@ -44,7 +44,7 @@ ALLOWED_TOGGLE_KEYS=(
 
 # Log print functions
 ok() {
-	[[ "$QUIET" -eq 0 && "$SILENT" -eq 0 ]] || return
+	[[ "$QUIET" -eq 0 && "$SILENT" -eq 0 ]] || return 0
 	tput setaf 51
 	printf '[OK]' >&2
 	tput sgr0
@@ -57,6 +57,7 @@ ok() {
 	else
 		printf '\n' >&2
 	fi
+	return 0
 }
 
 err() {
@@ -496,6 +497,7 @@ parse_args() {
 				[[ "$unique" -eq 0 ]] || err "Can't --boot-colors and --bootstrap on the same run"
 				unique=1
 				action="boot"
+				shift
 				;;
 			""|-h|--help)
 				usage
