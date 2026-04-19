@@ -443,6 +443,8 @@ EOF
 }
 
 parse_args() {
+	local unique=0
+	local multi=0
 	local action=""
 	local key=""
 	local new_value=""
@@ -453,6 +455,7 @@ parse_args() {
 				[[ -n "${2:-}" ]] || err "Missing key for get operation"
 				action="get"
 				key="$2"
+				multi=1
 				shift 2
 				;;
 			-s|--set)
@@ -461,6 +464,7 @@ parse_args() {
 				action="set"
 				key="$2"
 				new_value="$3"
+				multi=1
 				shift 3
 				;;
 			-n|--numeric)
@@ -479,15 +483,19 @@ parse_args() {
 				[[ -n "${2:-}" ]] || err "Missing key for toggle operation"
 				action="toggle"
 				key="$2"
+				multi=1
 				shift 2
 				;;
 			--boot-colors)
-				[[ "$action" == "" && "$#" -eq 1 ]] || err "This flag needs to run alone:" "--boot-colors"
-				boot_colors_from_kitty
+				[[ "$unique" -eq 0 ]] || err "Can't --bootstrap and --boot-colors on the same run"
+				unique=1
+				action="bcolors"
+				shift
 				;;
 			-b|--boot|--bootstrap|--rebuild|--reset)
-				[[ "$action" == "" && "$#" -eq 1 ]] || err "This flag needs to run alone:" "--bootstrap"
-				reset_json
+				[[ "$unique" -eq 0 ]] || err "Can't --boot-colors and --bootstrap on the same run"
+				unique=1
+				action="boot"
 				;;
 			""|-h|--help)
 				usage
@@ -498,6 +506,10 @@ parse_args() {
 		esac
 	done
 
+	if [[ "$unique" -eq 1 && "$multi" -eq 1 ]]; then
+		err "Can't mix boot flags like --bootstrap with action flags like --toggle"
+	fi
+
 	case "$action" in
 		get)
 			get_json_value "$key"
@@ -507,6 +519,12 @@ parse_args() {
 			;;
 		toggle)
 			toggle_json_value "$key"
+			;;
+		boot)
+			reset_json
+			;;
+		bcolors)
+			boot_colors_from_kitty
 			;;
 		"")
 			err "No action specified"
