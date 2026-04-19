@@ -7,8 +7,13 @@ STATE_FILE="$STATE_DIR/defaults"
 SAVE_DEFAULTS=0
 CLEAR_DEFAULTS=0
 MAX_DEPTH=1
+LIST=0
 LANGS=()
 FILES=()
+LIST_NAMES=()
+
+declare -A LIST_MATCHES=()
+declare -A LIST_FOUND=()
 
 err() {
 	tput setaf 1
@@ -63,9 +68,52 @@ write_log() {
 	: > "$OUTPUT_FILE"
 	for file in "$@"; do
 		printf '========== START OF FILE: %s ==========\n' "$file" >> "$OUTPUT_FILE"
-		cat "$file" >> "$OUTPUT_FILE"
+		cat -- "$file" >> "$OUTPUT_FILE"
 		printf '\n=========== END OF FILE: %s ===========\n' "$file" >> "$OUTPUT_FILE"
 	done
+}
+
+write_list_log() {
+	local name
+	local file
+
+	: > "$OUTPUT_FILE"
+
+	for name in "${LIST_NAMES[@]}"; do
+		if [[ -n ${LIST_FOUND[$name]+x} ]]; then
+			while IFS= read -r file; do
+				[ -n "$file" ] || continue
+				printf '========== START OF FILE: %s ==========\n' "$file" >> "$OUTPUT_FILE"
+				cat -- "$file" >> "$OUTPUT_FILE"
+				printf '\n=========== END OF FILE: %s ===========\n' "$file" >> "$OUTPUT_FILE"
+			done <<< "${LIST_MATCHES[$name]}"
+		else
+				printf '########## MISSING FILE: %s ##########\n' "$name" >> "$OUTPUT_FILE"
+				printf 'No matches for %s were found either in current dir or any subdirectory\n' "$name" >> "$OUTPUT_FILE"
+				printf '########### END OF MISSING FILE MESSAGE ###########\n' "$name" >> "$OUTPUT_FILE"
+
+		fi
+	done
+
+}
+
+collect_list_files() {
+	local file
+	local base
+	declare -A wanted=()
+
+	for base in "${LIST_NAMES[@]}"; do
+		wanted["$base"]=1
+	done
+
+	while IFS= read -r -d '' file; do
+		base=${file##*/}
+		if [[ -n "${wanted[$base]+x}" ]]; then
+			add_file "$file"
+			LIST_MATCHES["$base"]+="$file"$'\n'
+			LIST_FOUND["$base"]=1
+		fi
+	done < <(run_find -type f -print0)
 }
 
 save_defaults() {
@@ -102,6 +150,7 @@ Flags:
 				if left as 0 will find all possible files
 				in sub-directories
 	--help,		-h	Shows this help message
+	--list,		-l	Feed hard filenames to be included
 
 	(...)			Anything written other than these flags
 				will be treated as languages or extensions
@@ -142,6 +191,21 @@ parse_args() {
 				esac
 				MAX_DEPTH="$2"
 				shift 2
+				;;
+			-l|--list)
+				if [ "$SAVE_DEFAULTS" -eq 1 ] || [ "$CLEAR_DEFAULTS" -eq 1 ] || \
+					[ "$MAX_DEPTH" -ne 1 ] || [ "${#LANGS[@]}" -ne 0 ]; then
+						err "-l is exclusionary and must be run without any other flags combined"
+				fi
+
+				LIST=1
+				MAX_DEPTH=0
+				shift
+				
+				[ "$#" -gt 0 ] || err "-l expects at least one literal filename"	
+				LIST_NAMES=("$@")
+
+				break
 				;;
 			*)
 				LANGS+=("$1")
@@ -188,6 +252,16 @@ parse_langs() {
 	done
 }
 
+open_output() {
+	if command -v xdg-open >/dev/null 2>&1; then
+		xdg-open "$OUTPUT_FILE" >/dev/null 2>&1 &
+	elif command -v open >/dev/null 2>&1; then
+		open "$OUTPUT_FILE" >/dev/null 2>&1 &
+	else
+		printf '%s\n' "$OUTPUT_FILE"
+	fi
+}
+
 main() {
 	# Make sure all required cmds exist in this machine
 	need_cmd cat
@@ -196,6 +270,14 @@ main() {
 
 	# Parse the arguments given to the run
 	parse_args "$@"
+
+	if [ "$LIST" -eq 1 ]; then
+		log "Running list mode for '${LIST_NAMES[*]}'"
+		collect_list_files
+		write_list_log
+		open_output
+		exit 0
+	fi
 
 	# If this is a -c run, clean defaults and exit
 	if [ "$CLEAR_DEFAULTS" -eq 1 ]; then
@@ -235,14 +317,8 @@ main() {
 	mapfile -t FILES < <(printf '%s\n' "${FILES[@]}" | sort -u)
 
 	write_log "${FILES[@]}"
-
-	if command -v xdg-open >/dev/null 2>&1; then
-		xdg-open "$OUTPUT_FILE" >/dev/null 2>&1 &
-	elif command -v open >/dev/null 2>&1; then
-		open "$OUTPUT_FILE" >/dev/null 2>&1 &
-	else
-		printf '%s\n' "$OUTPUT_FILE"
-	fi
+	
+	open_output
 }
 
 main "$@"
