@@ -314,7 +314,8 @@ render_screen() {
 	screen+="========="$'\n'
 	screen+="$(build_preview)"$'\n'
 	screen+=$'\n'
-	screen+="Controls: j/k move  space toggle  h/l switch side  +/- adjust  q quit"$'\n'
+	screen+="Controls:"$'\n'
+	screen+="(↑/↓ or j/k): Move  (space-bar): Toggle  (→/← or h/l): Toggle Side  (→/← or +/-): Adjust % (q): Quit"$'\n'
 
 	tput cup 0 0
 	tput ed
