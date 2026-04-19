@@ -20,17 +20,23 @@ ALLOWED_SET_KEYS=(
 	".ui.hostname.side"
 	".ui.time.show"
 	".ui.time.side"
-	".theme.error"
-	".theme.success"
-	".theme.warning"
-	".theme.contrast1"
-	".theme.contrast2"
-	".theme.contrast3"
-	".theme.blend1"
-	".theme.blend2"
-	".ui.dir.shorten"
 	".ui.dir.show"
+	".ui.dir.shorten"
 	".ui.dir.max_ratio"
+	".ui.arrow.status"
+	".theme.palette.error"
+	".theme.palette.success"
+	".theme.palette.warning"
+	".theme.palette.contrast1"
+	".theme.palette.contrast2"
+	".theme.palette.contrast3"
+	".theme.palette.blend1"
+	".theme.palette.blend2"
+	".theme.roles.hostname"
+	".theme.roles.git"
+	".theme.roles.dir"
+	".theme.roles.time"
+	".theme.roles.arrow"
 )
 
 ALLOWED_TOGGLE_KEYS=(
@@ -41,6 +47,7 @@ ALLOWED_TOGGLE_KEYS=(
 	".ui.hostname.side"
 	".ui.time.show"
 	".ui.time.side"
+	".ui.arrow.status"
 )
 
 # - # - # - #
@@ -120,17 +127,29 @@ create_state_file() {
 		"time": {
 			"show": false,
 			"side": "right"
-		} 
+		},
+		"arrow": {
+			"status": true
+		}
 	},
 	"theme": {
-		"error": "#ff0000",
-		"success": "#00ff00",
-		"warning": "#ffff00",
-		"contrast1": "#ff00ff",
-		"contrast2": "#00ffff",
-		"contrast3": "#ffffff",
-		"blend1": "#ff5555",
-		"blend2": "#55ff55"
+		"palette": {
+			"error": "#ff0000",
+			"success": "#00ff00",
+			"warning": "#ffff00",
+			"contrast1": "#ff00ff",
+			"contrast2": "#00ffff",
+			"contrast3": "#ffffff",
+			"blend1": "#ff5555",
+			"blend2": "#55ff55"
+		},
+		"roles": {
+			"hostname": "warning",
+			"git": "blend1",
+			"dir": "contrast2",
+			"time": "contrast1",
+			"arrow": "success"
+		}
 	}
 }
 EOF
@@ -163,6 +182,17 @@ is_allowed_toggle_key() {
 	done
 
 	return 1
+}
+
+is_valid_palette_name() {
+	case "$1" in
+		error|success|warning|contrast1|contrast2|contrast3|blend1|blend2)
+			return 0
+			;;
+		*)
+			return 1
+			;;
+	esac
 }
 
 # - # - # - # - # - #
@@ -276,6 +306,43 @@ toggle_json_value() {
 	ok "New value:" "$new_value"
 }
 
+set_theme_role() {
+  local role="$1"
+  local palette_name="$2"
+  local tmp_file
+  local backup_path
+
+  case "$role" in
+    hostname|git|dir|time|arrow) ;;
+    *) err "Unknown theme role" "$role" ;;
+  esac
+
+  is_valid_palette_name "$palette_name" || err "Invalid palette name" "$palette_name"
+
+  tmp_file="$(mktemp)" || err "Failed to create temporary file"
+
+  jq \
+    --arg role "$role" \
+    --arg palette_name "$palette_name" \
+    '.theme.roles[$role] = $palette_name' \
+    "$STATE_FILE" > "$tmp_file" || {
+      rm -f "$tmp_file"
+      err "Failed to set theme role"
+    }
+
+  backup_path="$(backup_state_file)" || {
+    rm -f "$tmp_file"
+    err "Failed to back up state file"
+  }
+
+  mv "$tmp_file" "$STATE_FILE" || {
+    rm -f "$tmp_file"
+    err "Failed to replace state file"
+  }
+
+  ok "Updated theme role. Backup:" "$backup_path"
+}
+
 set_theme_palette() {
 	local error="$1"
 	local success="$2"
@@ -301,14 +368,14 @@ set_theme_palette() {
 		--arg blend1 "$blend1" \
 		--arg blend2 "$blend2" \
 		'
-		.theme.error = $error |
-		.theme.success = $success |
-		.theme.warning = $warning |
-		.theme.contrast1 = $contrast1 |
-		.theme.contrast2 = $contrast2 |
-		.theme.contrast3 = $contrast3 |
-		.theme.blend1 = $blend1 |
-		.theme.blend2 = $blend2 
+		.theme.palette.error = $error |
+		.theme.palette.success = $success |
+		.theme.palette.warning = $warning |
+		.theme.palette.contrast1 = $contrast1 |
+		.theme.palette.contrast2 = $contrast2 |
+		.theme.palette.contrast3 = $contrast3 |
+		.theme.palette.blend1 = $blend1 |
+		.theme.palette.blend2 = $blend2 
 		' \
 		"$STATE_FILE" > "$tmp_file" || {
 			rm -f "$tmp_file"
@@ -316,14 +383,14 @@ set_theme_palette() {
 		}
 
 	jq -e '
-		.theme.error != null and
-		.theme.success != null and
-		.theme.warning != null and
-		.theme.contrast1 != null and
-		.theme.contrast2 != null and
-		.theme.contrast3 != null and
-		.theme.blend1 != null and
-		.theme.blend2 != null
+		.theme.palette.error != null and
+		.theme.palette.success != null and
+		.theme.palette.warning != null and
+		.theme.palette.contrast1 != null and
+		.theme.palette.contrast2 != null and
+		.theme.palette.contrast3 != null and
+		.theme.palette.blend1 != null and
+		.theme.palette.blend2 != null
 		' \
 		"$tmp_file" > /dev/null 2>&1 || {
 		rm -f "$tmp_file"
@@ -360,6 +427,24 @@ get_kitty_color() {
 			exit
 		}
 	' "$file"
+}
+
+resolve_theme_role() {
+  local role="$1"
+  local palette_key
+  local color
+
+  palette_key="$(jq -r --arg role "$role" '.theme.roles[$role]' "$STATE_FILE")" \
+    || err "Failed to read theme role" "$role"
+
+  [[ "$palette_key" != "null" ]] || err "Unknown theme role" "$role"
+
+  color="$(jq -r --arg key "$palette_key" '.theme.palette[$key]' "$STATE_FILE")" \
+    || err "Failed to resolve palette key for role" "$role"
+
+  [[ "$color" != "null" ]] || err "Palette key not found for role" "$role"
+
+  printf '%s\n' "$color"
 }
 
 # - # - # - # - # - #
@@ -440,8 +525,8 @@ Options:
 					saving values seen there for terminal
 					theme values
 	--numeric,		-n	Simplifies boolean and positional keys
-					0 for 'false' and 'right' values,
-					1 for 'true' and 'left' values
+					0 for 'false' and 'left' values,
+					1 for 'true' and 'right' values
 	--quiet,		-q	Suppress regular output
 	--locate,		-l	Prints path to state_machine.json file
 	--help,			-h	Show this help
@@ -461,6 +546,7 @@ parse_args() {
 	local action=""
 	local key=""
 	local new_value=""
+	local role=""
 
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
@@ -511,6 +597,13 @@ parse_args() {
 				action="boot"
 				shift
 				;;
+			--resolve-role)
+				[[ -n "${2:-}" ]] || err "Missing role for resolve-role operation"
+				action="resolve"
+				role="$2"
+				multi=1
+				shift 2
+				;;
 			""|-h|--help)
 				usage
 				;;
@@ -533,6 +626,9 @@ parse_args() {
 			;;
 		toggle)
 			toggle_json_value "$key"
+			;;
+		resolve)
+			resolve_theme_role "$role"
 			;;
 		boot)
 			reset_json

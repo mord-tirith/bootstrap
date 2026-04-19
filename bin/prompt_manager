@@ -12,6 +12,13 @@ C_DIR_SHORTEN=""
 C_DIR_MAX_RATIO=""
 C_TIME_SHOW=""
 C_TIME_SIDE=""
+C_ARROW_STATUS=""
+
+C_HOSTNAME_COLOR_ROLE=""
+C_GIT_COLOR_ROLE=""
+C_DIR_COLOR_ROLE=""
+C_TIME_COLOR_ROLE=""
+C_ARROW_COLOR_ROLE=""
 
 THEME_SUCCESS=""
 THEME_ERROR=""
@@ -25,25 +32,42 @@ THEME_BLEND2=""
 MENU_ITEMS=(
 	"hostname_show"
 	"hostname_side"
+	"hostname_color"
 	"git_show"
+	"git_color"
 	"dir_show"
 	"dir_shorten"
 	"dir_max_ratio"
+	"dir_color"
 	"time_show"
 	"time_side"
+	"time_color"
+	"arrow_status"
+	"arrow_color"
+)
+
+PALETTE_ROLES=(
+	error
+	success
+	warning
+	contrast1
+	contrast2
+	contrast3
+	blend1
+	blend2
 )
 
 selected=0
 
 prep_theme() {
-	THEME_SUCCESS="$(sm_get ".theme.success")"
-	THEME_ERROR="$(sm_get ".theme.error")"
-	THEME_WARNING="$(sm_get ".theme.warning")"
-	THEME_HILIGHT1="$(sm_get ".theme.contrast1")"
-	THEME_HILIGHT2="$(sm_get ".theme.contrast2")"
-	THEME_HILIGHT3="$(sm_get ".theme.contrast3")"
-	THEME_BLEND1="$(sm_get ".theme.blend1")"
-	THEME_BLEND2="$(sm_get ".theme.blend2")"
+	THEME_SUCCESS="$(sm_get ".theme.palette.success")"
+	THEME_ERROR="$(sm_get ".theme.palette.error")"
+	THEME_WARNING="$(sm_get ".theme.palette.warning")"
+	THEME_HILIGHT1="$(sm_get ".theme.palette.contrast1")"
+	THEME_HILIGHT2="$(sm_get ".theme.palette.contrast2")"
+	THEME_HILIGHT3="$(sm_get ".theme.palette.contrast3")"
+	THEME_BLEND1="$(sm_get ".theme.palette.blend1")"
+	THEME_BLEND2="$(sm_get ".theme.palette.blend2")"
 }
 
 hex_to_rgb() {
@@ -85,16 +109,42 @@ sm_set() {
 	"$STATE_MANAGER" -s "$1" "$2" -q >/dev/null 2>&1
 }
 
+palette_hex_by_name() {
+	case "$1" in
+		error) printf '%s' "$THEME_ERROR" ;;
+		success) printf '%s' "$THEME_SUCCESS" ;;
+		warning) printf '%s' "$THEME_WARNING" ;;
+		contrast1) printf '%s' "$THEME_HILIGHT1" ;;
+		contrast2) printf '%s' "$THEME_HILIGHT2" ;;
+		contrast3) printf '%s' "$THEME_HILIGHT3" ;;
+		blend1) printf '%s' "$THEME_BLEND1" ;;
+		blend2) printf '%s' "$THEME_BLEND2" ;;
+		*) printf '#ffffff' ;;
+	esac
+}
+
 get_item_label() {
 	case "$1" in
 		hostname_show) echo "Display Hostname" ;;
 		hostname_side) echo "Hostname Side" ;;
+		hostname_color) echo "Hostname Color" ;;
 		git_show) echo "Display Git" ;;
+		git_color) echo "Git Color" ;;
 		dir_show) echo "Display Directory" ;;
 		dir_shorten) echo "Shorten Directory" ;;
-		dir_max_ratio) echo "Max Directory width %";;
+		dir_max_ratio) echo "Max Directory width %" ;;
+		dir_color) echo "Directory Color" ;;
 		time_show) echo "Display Time" ;;
 		time_side) echo "Time Side" ;;
+		time_color) echo "Time Color" ;;
+		arrow_status) echo "Arrow hints last exit status" ;;
+		arrow_color)
+			if [[ "$C_ARROW_STATUS" == "1" ]]; then
+				echo "Arrow color (disabled in status mode)"
+			else
+				echo "Arrow color"
+			fi
+			;;
 	esac
 }
 
@@ -115,13 +165,31 @@ get_cached_item_value() {
 	case "$1" in
 		hostname_show)	printf '%s' "$C_HOSTNAME_SHOW" ;;
 		hostname_side)	printf '%s' "$C_HOSTNAME_SIDE" ;;
+		hostname_color)	printf '%s' "$C_HOSTNAME_COLOR_ROLE" ;;
 		git_show)		printf '%s' "$C_GIT_SHOW" ;;
+		git_color)		printf '%s' "$C_GIT_COLOR_ROLE" ;;
 		dir_show)		printf '%s' "$C_DIR_SHOW" ;;
 		dir_shorten)	printf '%s' "$C_DIR_SHORTEN" ;;
 		dir_max_ratio)	printf '%s' "$C_DIR_MAX_RATIO" ;;
+		dir_color)		printf '%s' "$C_DIR_COLOR_ROLE" ;;
 		time_show)		printf '%s' "$C_TIME_SHOW" ;;
 		time_side)		printf '%s' "$C_TIME_SIDE" ;;
+		time_color)		printf '%s' "$C_TIME_COLOR_ROLE" ;;
+		arrow_status)	printf '%s' "$C_ARROW_STATUS" ;;
+		arrow_color)	printf '%s' "$C_ARROW_COLOR_ROLE" ;;
 	esac
+}
+
+render_role_value() {
+	local role="$1"
+
+	local hex color reset
+
+	hex="$(palette_hex_by_name "$role")"
+	color="$(fg_color "$hex")"
+	reset="$(reset_color)"
+
+	printf '%s%s%s' "$color" "$role" "$reset"
 }
 
 render_bool() {
@@ -143,23 +211,35 @@ visible_length() {
 refresh_state_cache() {
 	C_HOSTNAME_SHOW="$(sm_get_num ".ui.hostname.show")"
 	C_HOSTNAME_SIDE="$(sm_get ".ui.hostname.side")"
+	C_HOSTNAME_COLOR_ROLE="$(sm_get ".theme.roles.hostname")"
+
 	C_GIT_SHOW="$(sm_get_num ".ui.git.show")"
+	C_GIT_COLOR_ROLE="$(sm_get ".theme.roles.git")"
+
 	C_DIR_SHOW="$(sm_get_num ".ui.dir.show")"
 	C_DIR_SHORTEN="$(sm_get_num ".ui.dir.shorten")"
 	C_DIR_MAX_RATIO="$(sm_get ".ui.dir.max_ratio")"
+	C_DIR_COLOR_ROLE="$(sm_get ".theme.roles.dir")"
+
 	C_TIME_SHOW="$(sm_get_num ".ui.time.show")"
 	C_TIME_SIDE="$(sm_get ".ui.time.side")"
+	C_TIME_COLOR_ROLE="$(sm_get ".theme.roles.time")"
+
+	C_ARROW_STATUS="$(sm_get_num ".ui.arrow.status")"
+	C_ARROW_COLOR_ROLE="$(sm_get ".theme.roles.arrow")"
 }
 
 build_preview() {
 	local left="" right="" dir_text=""
-	local C_HOST C_GIT C_DIR C_TIME C_ARROW C_RESET
+	local C_HOST C_GIT C_DIR C_TIME C_ARROW C_RESET C_ARROW_OK C_ARROW_FAIL
 
-	C_HOST="$(fg_color "$THEME_WARNING")"
-	C_GIT="$(fg_color "$THEME_BLEND1")"
-	C_DIR="$(fg_color "$THEME_HILIGHT2")"
-	C_TIME="$(fg_color "$THEME_HILIGHT1")"
-	C_ARROW="$(fg_color "$THEME_SUCCESS")"
+	C_HOST="$(fg_color "$(palette_hex_by_name "$C_HOSTNAME_COLOR_ROLE")")"
+	C_GIT="$(fg_color "$(palette_hex_by_name "$C_GIT_COLOR_ROLE")")"
+	C_DIR="$(fg_color "$(palette_hex_by_name "$C_DIR_COLOR_ROLE")")"
+	C_TIME="$(fg_color "$(palette_hex_by_name "$C_TIME_COLOR_ROLE")")"
+	C_ARROW="$(fg_color "$(palette_hex_by_name "$C_ARROW_COLOR_ROLE")")"
+	C_ARROW_OK="$(fg_color "$THEME_SUCCESS")"
+	C_ARROW_FAIL="$(fg_color "$THEME_ERROR")"
 	C_RESET="$(reset_color)"
 
 	if [[ "$C_DIR_SHOW" == "1" ]]; then
@@ -190,13 +270,18 @@ build_preview() {
 
 	if [[ "$C_TIME_SHOW" == "1" ]]; then
 		if [[ "$C_TIME_SIDE" == "left" ]]; then
-			left="${left}${C_TIME}[10:10]${C_RESET}"
+			left="${C_TIME}[10:10]${C_RESET}${left}"
 		else
 			right="${right}${C_TIME}<10:10:10>${C_RESET}"
 		fi
 	fi
+	
+	if [[ "$C_ARROW_STATUS" == "0" ]]; then
+		left="${left}${C_DIR}${dir_text}${C_ARROW}->${C_RESET}"
+	else
+		left="${left}${C_DIR}${dir_text}${C_ARROW_OK}->${C_RESET}"
+	fi
 
-	left="${left}${C_DIR}${dir_text}${C_ARROW}->${C_RESET}"
 
 	printf '%s\n' "$left"
 	if [[ -n "$right" ]]; then
@@ -237,7 +322,31 @@ toggle_selected() {
 			sm_toggle ".ui.time.side"
 			if [[ "$C_TIME_SIDE" == "left" ]]; then C_TIME_SIDE="right"; else C_TIME_SIDE="left"; fi
 			;;
+		arrow_status)
+			sm_toggle ".ui.arrow.status"
+			if [[ "$C_ARROW_STATUS" == "1" ]]; then C_ARROW_STATUS="0"; else C_ARROW_STATUS="1"; fi
+			;;
 	esac
+}
+
+cycle_palette_name() {
+	local current="$1"
+	local direction="$2"
+	local i next
+
+	for i in "${!PALETTE_ROLES[@]}"; do
+		if [[ "${PALETTE_ROLES[$i]}" == "$current" ]]; then
+			if [[ "$direction" == "up" ]]; then
+				next=$(( (i + 1) % ${#PALETTE_ROLES[@]} ))
+			else
+				next=$(( (i - 1 + ${#PALETTE_ROLES[@]}) % ${#PALETTE_ROLES[@]} ))
+			fi
+			printf '%s\n' "${PALETTE_ROLES[$next]}"
+			return 0
+		fi
+	done
+
+	printf '%s\n' "success"
 }
 
 adjust_selected() {
@@ -274,6 +383,32 @@ adjust_selected() {
 			sm_set ".ui.dir.max_ratio" "$next"
 			C_DIR_MAX_RATIO="$next"
 			;;
+		hostname_color)
+			next="$(cycle_palette_name "$C_HOSTNAME_COLOR_ROLE" "$direction")"
+			sm_set ".theme.roles.hostname" "$next"
+			C_HOSTNAME_COLOR_ROLE="$next"
+			;;
+		git_color)
+			next="$(cycle_palette_name "$C_GIT_COLOR_ROLE" "$direction")"
+			sm_set ".theme.roles.git" "$next"
+			C_GIT_COLOR_ROLE="$next"
+			;;
+		dir_color)
+			next="$(cycle_palette_name "$C_DIR_COLOR_ROLE" "$direction")"
+			sm_set ".theme.roles.dir" "$next"
+			C_DIR_COLOR_ROLE="$next"
+			;;
+		time_color)
+			next="$(cycle_palette_name "$C_TIME_COLOR_ROLE" "$direction")"
+			sm_set ".theme.roles.time" "$next"
+			C_TIME_COLOR_ROLE="$next"
+			;;
+		arrow_color)
+			[[ "$C_ARROW_STATUS" == "0" ]] || return
+			next="$(cycle_palette_name "$C_ARROW_COLOR_ROLE" "$direction")"
+			sm_set ".theme.roles.arrow" "$next"
+			C_ARROW_COLOR_ROLE="$next"
+			;;
 	esac
 }
 
@@ -296,15 +431,25 @@ render_screen() {
 		fi
 
 		case "$item" in
-			hostname_show|git_show|dir_show|dir_shorten|time_show)
+			hostname_show|git_show|dir_show|dir_shorten|time_show|arrow_status)
 				marker="$(render_bool "$value")"
 				screen+="${prefix}${marker} ${label}"$'\n'
 				;;
 			hostname_side|time_side)
 				screen+="${prefix}[${value}] ${label}"$'\n'
 				;;
+			hostname_color|git_color|dir_color|time_color)
+				screen+="${prefix}[$(render_role_value "$value")] ${label}"$'\n'
+				;;
 			dir_max_ratio)
 				screen+="${prefix}[${value}%] ${label}"$'\n'
+				;;
+			arrow_color)
+				if [[ "$C_ARROW_STATUS" == "1" ]]; then
+					screen+="${prefix}[-] ${label}"$'\n'
+				else
+					screen+="${prefix}[$(render_role_value "$value")] ${label}"$'\n'
+				fi
 				;;
 		esac
 	done

@@ -59,7 +59,7 @@ build_git_part() {
 		command git rev-parse --short HEAD 2>/dev/null
 	)" || return
 
-	printf '%s[%s]%s' "$P_BLEND1" "$branch" "$P_RESET"
+	printf '%s[%s]%s' "$P_GIT_COLOR" "$branch" "$P_RESET"
 }
 
 build_time_part()
@@ -69,9 +69,9 @@ build_time_part()
 	[[ "$side" -eq "$P_TIME_POS" && "$P_SHOW_TIME" -eq 1 ]] || return
 
 	if [[ "$side" -eq 1 ]]; then
-		printf '%s<%%*>%s' "$P_HILIGHT1" "$P_RESET"
+		printf '%s<%%*>%s' "$P_TIME_COLOR" "$P_RESET"
 	else
-		printf '%s[%%T]%s' "$P_HILIGHT1" "$P_RESET"
+		printf '%s[%%T]%s' "$P_TIME_COLOR" "$P_RESET"
 	fi
 }
 
@@ -81,7 +81,7 @@ build_hostname_part() {
 	[[ "$side" -eq "$P_HOSTNAME_POS" ]] || return
 
 	if [[ "$P_SHOW_HOSTNAME" -eq 1 ]]; then
-		printf '%s[%%m]%s' "$P_WARNING" "$P_RESET"
+		printf '%s[%%m]%s' "$P_HOST_COLOR" "$P_RESET"
 	fi
 }
 
@@ -92,16 +92,16 @@ build_dir_part() {
 
 	case "$mode" in
 		full)
-			printf '%s%%~%s' "$P_HILIGHT2" "$P_RESET"
+			printf '%s%%~%s' "$P_DIR_COLOR" "$P_RESET"
 			;;
 		medium)
-			printf '%s%%2~%s' "$P_HILIGHT2" "$P_RESET"
+			printf '%s%%2~%s' "$P_DIR_COLOR" "$P_RESET"
 			;;
 		short)
-			printf '%s%%1~%s' "$P_HILIGHT2" "$P_RESET"
+			printf '%s%%1~%s' "$P_DIR_COLOR" "$P_RESET"
 			;;
 		tiny)
-			printf '%s%%c%s' "$P_HILIGHT2" "$P_RESET"
+			printf '%s%%c%s' "$P_DIR_COLOR" "$P_RESET"
 			;;
 	esac
 }
@@ -110,10 +110,14 @@ build_status_arrow() {
 	local last_status="$1"
 	local arrow_color
 
-	if [[ "$last_status" -eq 0 ]]; then
-		arrow_color="$P_SUCCESS"
+	if [[ "$P_ARROW_STATUS" -eq 1 ]]; then
+		if [[ "$last_status" -eq 0 ]]; then
+			arrow_color="$P_SUCCESS"
+		else
+			arrow_color="$P_ERROR"
+		fi
 	else
-		arrow_color="$P_ERROR"
+		arrow_color="$P_ARROW_COLOR"
 	fi
 
 	printf '%s->%s ' "$arrow_color" "$P_RESET"
@@ -140,7 +144,7 @@ build_prompt() {
 
 	dir_part="$(build_dir_part "$P_DIR_MODE")"
 
-	PROMPT="${hostname_prompt}${git_prompt}${dir_part}${time_prompt}${arrow_part}"
+	PROMPT="${time_prompt}${hostname_prompt}${git_prompt}${dir_part}${arrow_part}"
 	RPROMPT="${hostname_rprompt}${time_rprompt}"
 }
 
