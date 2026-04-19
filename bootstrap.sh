@@ -240,6 +240,13 @@ link_zsh_config() {
 	write_zsh_loader
 }
 
+prep_state_manager() {
+	local sm="$INSTALL_DIR/scripts/state_manager.sh"
+
+	$("$sm" -b -q)
+	$("$sm" --boot-colors -q)
+}
+
 main() {
 	parse_args "$@"
 
@@ -254,11 +261,12 @@ main() {
 	link_zsh_config
 	link_kitty_config
 
-	run_step "$INSTALL_DIR/scripts/state_manager.sh" -qr
 	run_step "$INSTALL_DIR/scripts/bootnvim.sh"
 	run_step "$INSTALL_DIR/scripts/linknvim.sh"
 	run_step "$INSTALL_DIR/scripts/linkbin.sh"
 	run_step "$INSTALL_DIR/scripts/packages.sh"
+
+	prep_state_manager
 
 	ok "Bootstrap complete"
 	ok "Repo: $INSTALL_DIR"
