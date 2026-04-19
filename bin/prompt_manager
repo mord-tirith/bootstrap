@@ -111,6 +111,19 @@ get_item_value() {
 	esac
 }
 
+get_cached_item_value() {
+	case "$1" in
+		hostname_show)	printf '%s' "$C_HOSTNAME_SHOW" ;;
+		hostname_side)	printf '%s' "$C_HOSTNAME_SIDE" ;;
+		git_show)		printf '%s' "$C_GIT_SHOW" ;;
+		dir_show)		printf '%s' "$C_DIR_SHOW" ;;
+		dir_shorten)	printf '%s' "$C_DIR_SHORTEN" ;;
+		dir_max_ratio)	printf '%s' "$C_DIR_MAX_RATIO" ;;
+		time_show)		printf '%s' "$C_TIME_SHOW" ;;
+		time_side)		printf '%s' "$C_TIME_SIDE" ;;
+	esac
+}
+
 render_bool() {
 	if [[ "$1" == "1" ]]; then
 		printf '[*]'
@@ -121,8 +134,10 @@ render_bool() {
 
 visible_length() {
 	local text="$1"
+	local stripped
 
-	printf '%s' "$text" | sed -E $'s/\x1b\\[0-9;]*m//g' | wc -c | tr -d ' '
+	stripped="$(printf '%s' "$text" | sed -E $'s/\x1b\\[[0-9;]*m//g')"
+	printf '%d' "${#stripped}"
 }
 
 refresh_state_cache() {
@@ -227,27 +242,37 @@ toggle_selected() {
 
 adjust_selected() {
 	local direction="$1"
-	local current next
+	local next
 
 	case "${MENU_ITEMS[$selected]}" in
 		hostname_side)
 			sm_toggle ".ui.hostname.side"
+			if [[ "$C_HOSTNAME_SIDE" == "left" ]]; then
+				C_HOSTNAME_SIDE="right"
+			else
+				C_HOSTNAME_SIDE="left"
+			fi
 			;;
 		time_side)
 			sm_toggle ".ui.time.side"
+			if [[ "$C_TIME_SIDE" == "left" ]]; then
+				C_TIME_SIDE="right"
+			else
+				C_TIME_SIDE="left"
+			fi
 			;;
 		dir_max_ratio)
-			current="$(sm_get ".ui.dir.max_ratio")"
 			if [[ "$direction" == "up" ]]; then
-				next=$(( current + 5 ))
+				next=$(( C_DIR_MAX_RATIO + 5 ))
 			else
-				next=$(( current - 5 ))
+				next=$(( C_DIR_MAX_RATIO - 5 ))
 			fi
-			
+
 			(( next < 10 )) && next=10
 			(( next > 95 )) && next=95
 
 			sm_set ".ui.dir.max_ratio" "$next"
+			C_DIR_MAX_RATIO="$next"
 			;;
 	esac
 }
@@ -262,7 +287,7 @@ render_screen() {
 	for i in "${!MENU_ITEMS[@]}"; do
 		item="${MENU_ITEMS[$i]}"
 		label="$(get_item_label "$item")"
-		value="$(get_item_value "$item")"
+		value="$(get_cached_item_value "$item")"
 
 		if [[ "$i" -eq "$selected" ]]; then
 			prefix="> "
