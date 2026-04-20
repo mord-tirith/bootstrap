@@ -4,6 +4,8 @@ set -u
 
 STATE_MANAGER="${HOME}/.dotfiles/scripts/state_manager.sh"
 
+MODE="main"
+
 C_HOSTNAME_SHOW=""
 C_HOSTNAME_SIDE=""
 C_GIT_SHOW=""
@@ -19,55 +21,486 @@ C_GIT_COLOR_ROLE=""
 C_DIR_COLOR_ROLE=""
 C_TIME_COLOR_ROLE=""
 C_ARROW_COLOR_ROLE=""
-
-THEME_SUCCESS=""
-THEME_ERROR=""
-THEME_WARNING=""
-THEME_HILIGHT1=""
-THEME_HILIGHT2=""
-THEME_HILIGHT3=""
-THEME_BLEND1=""
-THEME_BLEND2=""
+C_SUCCESS_COLOR_ROLE=""
+C_ERROR_COLOR_ROLE=""
+C_WARNING_COLOR_ROLE=""
+C_RESET_COLOR=""
 
 MENU_ITEMS=(
+	"__header__:Hostname"
 	"hostname_show"
 	"hostname_side"
 	"hostname_color"
+
+	"__header__:Git"
 	"git_show"
 	"git_color"
+
+	"__header__:Directory"
 	"dir_show"
 	"dir_shorten"
 	"dir_max_ratio"
 	"dir_color"
+
+	"__header__:Time"
 	"time_show"
 	"time_side"
 	"time_color"
+
+	"__header__:Arrow"
 	"arrow_status"
 	"arrow_color"
 )
 
-PALETTE_ROLES=(
-	error
-	success
-	warning
-	contrast1
-	contrast2
-	contrast3
-	blend1
-	blend2
-)
+MAX_PALETTE_INDEX=31
+PALETTE_ROLES=()
+
+C_PALETTE_HEX=()
+C_PALETTE_FG=()
 
 selected=0
 
-prep_theme() {
-	THEME_SUCCESS="$(sm_get ".theme.palette.success")"
-	THEME_ERROR="$(sm_get ".theme.palette.error")"
-	THEME_WARNING="$(sm_get ".theme.palette.warning")"
-	THEME_HILIGHT1="$(sm_get ".theme.palette.contrast1")"
-	THEME_HILIGHT2="$(sm_get ".theme.palette.contrast2")"
-	THEME_HILIGHT3="$(sm_get ".theme.palette.contrast3")"
-	THEME_BLEND1="$(sm_get ".theme.palette.blend1")"
-	THEME_BLEND2="$(sm_get ".theme.palette.blend2")"
+LAST_EDITED_COLOR_KEY=""
+EDITING_COLOR=0
+EDITING_ROLE=0
+EDIT_BUFFER=""
+EDIT_TARGET_COLOR=""
+STATUS_MESSAGE=""
+
+COLOR_ROW=0
+COLOR_COL=0
+
+palette_fg_by_name() {
+	local palette_name="$1"
+	local index
+
+	if [[ "$palette_name" =~ ^color([0-9]+)$ ]]; then
+		index="${BASH_REMATCH[1]}"
+		if (( index >= 0 && index <= MAX_PALETTE_INDEX )); then
+			printf '%s' "${C_PALETTE_FG[$index]}"
+			return 0
+		fi
+	fi
+
+	printf '%s' "$(fg_color "#ffffff")"
+}
+
+current_color_screen_item() {
+	get_color_screen_item "$COLOR_ROW" "$COLOR_COL"
+}
+
+get_color_screen_item() {
+	local row="$1"
+	local col="$2"
+
+	case "$col" in
+		0)
+			printf 'color%d\n' "$row"
+			;;
+		1)
+			printf 'color%d\n' "$((row + 16))"
+			;;
+		2)
+			case "$row" in
+				0) printf 'success\n' ;;
+				1) printf 'error\n' ;;
+				2) printf 'warning\n' ;;
+				*) printf '' ;;
+			esac
+			;;
+	esac
+}
+
+move_color_selection_up() {
+	if (( COLOR_COL == 2 )); then
+		(( COLOR_ROW > 0 )) && (( COLOR_ROW-- ))
+	else
+		COLOR_ROW=$(( (COLOR_ROW - 1 + 16) % 16 ))
+	fi
+}
+
+move_color_selection_down() {
+	if (( COLOR_COL == 2 )); then
+		(( COLOR_ROW < 2 )) && (( COLOR_ROW++ ))
+	else
+		COLOR_ROW=$(( (COLOR_ROW + 1) % 16 ))
+	fi
+}
+
+move_color_selection_left() {
+	if (( EDITING_COLOR == 1 || EDITING_ROLE == 1 )); then
+		return
+	fi
+
+	case "$COLOR_COL" in
+		0) COLOR_COL=2 ;;
+		1) COLOR_COL=0 ;;
+		2) COLOR_COL=1 ;;
+	esac
+
+	if (( COLOR_COL == 2 && COLOR_ROW > 2 )); then
+		COLOR_ROW=2
+	fi
+}
+
+move_color_selection_right() {
+	if (( EDITING_COLOR == 1 || EDITING_ROLE == 1 )); then
+		return
+	fi
+
+	case "$COLOR_COL" in
+		0) COLOR_COL=1 ;;
+		1) COLOR_COL=2 ;;
+		2) COLOR_COL=0 ;;
+	esac
+
+	if (( COLOR_COL == 2 && COLOR_ROW > 2 )); then
+		COLOR_ROW=2
+	fi
+}
+
+render_used_roles_summary() {
+	printf 'hostname: %s   git: %s   dir: %s   time: %s   arrow: %s\n' \
+		"$C_HOSTNAME_COLOR_ROLE" \
+		"$C_GIT_COLOR_ROLE" \
+		"$C_DIR_COLOR_ROLE" \
+		"$C_TIME_COLOR_ROLE" \
+		"$C_ARROW_COLOR_ROLE"
+}
+
+build_output_preview() {
+	local ok_color err_color warn_color reset
+
+	ok_color="$(fg_color "$(palette_hex_by_name "$C_SUCCESS_COLOR_ROLE")")"
+	err_color="$(fg_color "$(palette_hex_by_name "$C_ERROR_COLOR_ROLE")")"
+	warn_color="$(fg_color "$(palette_hex_by_name "$C_WARNING_COLOR_ROLE")")"
+	reset="$(reset_color)"
+
+	printf '%s[OK]%s  Build completed\n' "$ok_color" "$reset"
+	printf '%s[ERROR]%s Something failed\n' "$err_color" "$reset"
+	printf '%s[WARN]%s Check configuration\n' "$warn_color" "$reset"
+}
+
+build_sample_text_preview() {
+	local key color reset
+
+	if (( EDITING_COLOR == 1 )) && [[ "$EDIT_BUFFER" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
+		color="$(fg_color "$EDIT_BUFFER")"
+		reset="$(reset_color)"
+		printf '%sThe quick brown fox jumps over the lazy dog.\n' "$color"
+		printf '0123456789 !@#$%%^&*()[]{}<>%s\n' "$reset"
+		return 0
+	fi
+
+	if [[ -n "$LAST_EDITED_COLOR_KEY" ]]; then
+		key="$LAST_EDITED_COLOR_KEY"
+	else
+		key="$(current_color_screen_item)"
+		[[ -n "$key" ]] || key="color1"
+
+		case "$key" in
+			success) key="$C_SUCCESS_COLOR_ROLE" ;;
+			error)   key="$C_ERROR_COLOR_ROLE" ;;
+			warning) key="$C_WARNING_COLOR_ROLE" ;;
+		esac
+	fi
+
+	color="$(fg_color "$(palette_hex_by_name "$key")")"
+	reset="$(reset_color)"
+
+	printf '%sThe quick brown fox jumps over the lazy dog.\n' "$color"
+	printf '0123456789 !@#$%%^&*()[]{}<>%s\n' "$reset"
+}
+
+render_palette_binding() {
+	local key="$1"
+	local selected="$2"
+	local hex prefix suffix color hex_display
+
+	hex="$(palette_hex_by_name "$key")"
+	color="$(palette_fg_by_name "$key")"
+	hex_display="${color}${hex}${C_RESET_COLOR}"
+
+	prefix="   "
+	suffix="   "
+
+	if [[ "$selected" == "1" ]]; then
+		prefix=" > "
+	fi
+
+	if (( EDITING_COLOR == 1 )) && [[ "$EDIT_TARGET_COLOR" == "$key" ]]; then
+		prefix=">> "
+		suffix=" <<"
+	fi
+
+	printf '%s%-7s - %s%s' "$prefix" "$key" "$hex_display" "$suffix"
+}
+
+render_status_binding() {
+	local role="$1"
+	local selected="$2"
+	local role_value prefix suffix
+
+	case "$role" in
+		success) role_value="$C_SUCCESS_COLOR_ROLE" ;;
+		error)   role_value="$C_ERROR_COLOR_ROLE" ;;
+		warning) role_value="$C_WARNING_COLOR_ROLE" ;;
+		*)       role_value="color1" ;;
+	esac
+
+	prefix="   "
+	suffix="   "
+
+	if [[ "$selected" == "1" ]]; then
+		prefix=" > "
+	fi
+
+	if (( EDITING_ROLE == 1 )) && [[ "$EDIT_TARGET_COLOR" == "$role" ]]; then
+		prefix=">> "
+		suffix=" <<"
+	fi
+
+	printf '%s%-7s - %s%s' "$prefix" "$role" "$(render_role_value "$role_value")" "$suffix"
+}
+
+render_color_bindings_grid() {
+	local row left_idx mid_idx
+	local left_key mid_key status_key
+	local left_sel mid_sel status_sel
+	local left_text mid_text status_text
+	local current_item
+
+	current_item="$(current_color_screen_item)"
+
+	for ((row=0; row<16; row++)); do
+		left_idx=$row
+		mid_idx=$((row + 16))
+
+		left_key="color${left_idx}"
+		mid_key="color${mid_idx}"
+
+		left_sel=0
+		mid_sel=0
+		status_sel=0
+
+		[[ "$current_item" == "$left_key" ]] && left_sel=1
+		[[ "$current_item" == "$mid_key" ]] && mid_sel=1
+
+		left_text="$(render_palette_binding "$left_key" "$left_sel")"
+		mid_text="$(render_palette_binding "$mid_key" "$mid_sel")"
+
+		if (( row == 0 )); then
+			status_key="success"
+		elif (( row == 1 )); then
+			status_key="error"
+		elif (( row == 2 )); then
+			status_key="warning"
+		else
+			status_key=""
+		fi
+
+		if [[ -n "$status_key" ]]; then
+			[[ "$current_item" == "$status_key" ]] && status_sel=1
+			status_text="$(render_status_binding "$status_key" "$status_sel")"
+			printf '%-22s %-22s %s\n' "$left_text" "$mid_text" "$status_text"
+		else
+			printf '%-22s %-22s\n' "$left_text" "$mid_text"
+		fi
+	done
+}
+
+start_color_hex_edit() {
+	local item
+	item="$(current_color_screen_item)"
+
+	[[ "$item" == color* ]] || return 1
+
+	EDITING_COLOR=1
+	EDITING_ROLE=0
+	EDIT_TARGET_COLOR="$item"
+	EDIT_BUFFER="$(palette_hex_by_name "$item")"
+	STATUS_MESSAGE=""
+}
+
+start_status_role_edit() {
+	local item
+	item="$(current_color_screen_item)"
+
+	case "$item" in
+		success|error|warning)
+			EDITING_ROLE=1
+			EDITING_COLOR=0
+			EDIT_TARGET_COLOR="$item"
+			STATUS_MESSAGE=""
+			;;
+		*)
+			return 1
+			;;
+	esac
+}
+
+cycle_status_role_binding() {
+	local direction="$1"
+	local current next
+
+	case "$EDIT_TARGET_COLOR" in
+		success) current="$C_SUCCESS_COLOR_ROLE" ;;
+		error)   current="$C_ERROR_COLOR_ROLE" ;;
+		warning) current="$C_WARNING_COLOR_ROLE" ;;
+		*) return 1 ;;
+	esac
+
+	next="$(cycle_palette_name "$current" "$direction")"
+	sm_set ".theme.roles.${EDIT_TARGET_COLOR}" "$next"
+
+	case "$EDIT_TARGET_COLOR" in
+		success) C_SUCCESS_COLOR_ROLE="$next" ;;
+		error)   C_ERROR_COLOR_ROLE="$next" ;;
+		warning) C_WARNING_COLOR_ROLE="$next" ;;
+	esac
+
+	build_palette_roles
+	LAST_EDITED_COLOR_KEY="$next"
+	STATUS_MESSAGE="Updated ${EDIT_TARGET_COLOR} -> ${next}"
+}
+
+cancel_color_edit() {
+	EDITING_COLOR=0
+	EDITING_ROLE=0
+	EDIT_TARGET_COLOR=""
+	EDIT_BUFFER=""
+	STATUS_MESSAGE="Edit cancelled"
+}
+
+submit_color_hex_edit() {
+	[[ -n "$EDIT_TARGET_COLOR" ]] || return 1
+
+	if sm_set ".palette.${EDIT_TARGET_COLOR}" "$EDIT_BUFFER"; then
+		LAST_EDITED_COLOR_KEY="$EDIT_TARGET_COLOR"
+		EDITING_COLOR=0
+		EDIT_TARGET_COLOR=""
+		EDIT_BUFFER=""
+		STATUS_MESSAGE="Saved ${LAST_EDITED_COLOR_KEY}"
+		refresh_state_cache
+		build_palette_roles
+	else
+		STATUS_MESSAGE="Invalid hex color"
+	fi
+}
+
+handle_color_edit_key() {
+	local key="$1"
+
+	case "$key" in
+		""|$'\n'|$'\r')
+			submit_color_hex_edit
+			;;
+		$'\177'|$'\b')
+			EDIT_BUFFER="${EDIT_BUFFER%?}"
+			;;
+		$'\e')
+			cancel_color_edit
+			;;
+		'#')
+			if [[ -z "$EDIT_BUFFER" ]]; then
+				EDIT_BUFFER="#"
+			fi
+			;;
+		[a-fA-F0-9])
+			if (( ${#EDIT_BUFFER} < 7 )); then
+				EDIT_BUFFER+="$key"
+			fi
+			;;
+	esac
+}
+
+is_header_item() {
+	[[ "$1" == __header__:* ]]
+}
+
+header_text() {
+	printf '%s\n' "${1#__header__:}"
+}
+
+pad_visible_right() {
+	local text="$1"
+	local target_width="$2"
+	local visible pad
+
+	visible="$(visible_length "$text")"
+	pad=$(( target_width - visible ))
+	(( pad < 0 )) && pad=0
+
+	printf '%s%*s' "$text" "$pad" ''
+}
+
+build_palette_roles() {
+	local i role hex
+	local in_white_run=0
+
+	PALETTE_ROLES=()
+
+	for ((i=0; i<=MAX_PALETTE_INDEX; i++)); do
+		role="color$i"
+		hex="${C_PALETTE_HEX[$i]:-#ffffff}"
+		hex="${hex,,}"
+
+		if [[ "$hex" == "#ffffff" ]]; then
+			if [[ "$in_white_run" -eq 0 ]]; then
+				PALETTE_ROLES+=("$role")
+				in_white_run=1
+			fi
+		else
+			PALETTE_ROLES+=("$role")
+			in_white_run=0
+		fi
+	done
+
+	if [[ "${#PALETTE_ROLES[@]}" -eq 0 ]]; then
+		PALETTE_ROLES=("color1")
+	fi
+
+	ensure_palette_role_present "$C_HOSTNAME_COLOR_ROLE"
+	ensure_palette_role_present "$C_GIT_COLOR_ROLE"
+	ensure_palette_role_present "$C_DIR_COLOR_ROLE"
+	ensure_palette_role_present "$C_TIME_COLOR_ROLE"
+	ensure_palette_role_present "$C_ARROW_COLOR_ROLE"
+	ensure_palette_role_present "$C_SUCCESS_COLOR_ROLE"
+	ensure_palette_role_present "$C_ERROR_COLOR_ROLE"
+	ensure_palette_role_present "$C_WARNING_COLOR_ROLE"
+}
+
+ensure_palette_role_present() {
+	local wanted="$1"
+	local role
+
+	[[ -n "$wanted" ]] || return 0
+
+	for role in "${PALETTE_ROLES[@]}"; do
+		[[ "$role" == "$wanted" ]] && return 0
+	done
+
+	PALETTE_ROLES+=("$wanted")
+}
+
+cycle_palette_name() {
+	local current="$1"
+	local direction="$2"
+	local i next
+
+	for i in "${!PALETTE_ROLES[@]}"; do
+		if [[ "${PALETTE_ROLES[$i]}" == "$current" ]]; then
+			if [[ "$direction" == "up" ]]; then
+				next=$(( (i + 1) % ${#PALETTE_ROLES[@]} ))
+			else
+				next=$(( (i - 1 + ${#PALETTE_ROLES[@]}) % ${#PALETTE_ROLES[@]} ))
+			fi
+			printf '%s\n' "${PALETTE_ROLES[$next]}"
+			return 0
+		fi
+	done
+
+	printf '%s\n' "color1"
 }
 
 hex_to_rgb() {
@@ -110,54 +543,54 @@ sm_set() {
 }
 
 palette_hex_by_name() {
-	case "$1" in
-		error) printf '%s' "$THEME_ERROR" ;;
-		success) printf '%s' "$THEME_SUCCESS" ;;
-		warning) printf '%s' "$THEME_WARNING" ;;
-		contrast1) printf '%s' "$THEME_HILIGHT1" ;;
-		contrast2) printf '%s' "$THEME_HILIGHT2" ;;
-		contrast3) printf '%s' "$THEME_HILIGHT3" ;;
-		blend1) printf '%s' "$THEME_BLEND1" ;;
-		blend2) printf '%s' "$THEME_BLEND2" ;;
-		*) printf '#ffffff' ;;
-	esac
+	local palette_name="$1"
+	local index
+
+	if [[ "$palette_name" =~ ^color([0-9]+)$ ]]; then
+		index="${BASH_REMATCH[1]}"
+		if (( index >= 0 && index <= MAX_PALETTE_INDEX )); then
+			printf '%s' "${C_PALETTE_HEX[$index]:-#ffffff}"
+			return 0
+		fi
+	fi
+
+	printf '#ffffff'
+}
+
+move_selection_down() {
+	local count="${#MENU_ITEMS[@]}"
+
+	while true; do
+		selected=$(( (selected + 1) % count ))
+		is_header_item "${MENU_ITEMS[$selected]}" || break
+	done
+}
+
+move_selection_up() {
+	local count="${#MENU_ITEMS[@]}"
+
+	while true; do
+		selected=$(( (selected - 1 + count) % count ))
+		is_header_item "${MENU_ITEMS[$selected]}" || break
+	done
 }
 
 get_item_label() {
 	case "$1" in
-		hostname_show) echo "Display Hostname" ;;
-		hostname_side) echo "Hostname Side" ;;
-		hostname_color) echo "Hostname Color" ;;
-		git_show) echo "Display Git" ;;
-		git_color) echo "Git Color" ;;
-		dir_show) echo "Display Directory" ;;
-		dir_shorten) echo "Shorten Directory" ;;
-		dir_max_ratio) echo "Max Directory width %" ;;
-		dir_color) echo "Directory Color" ;;
-		time_show) echo "Display Time" ;;
-		time_side) echo "Time Side" ;;
-		time_color) echo "Time Color" ;;
-		arrow_status) echo "Arrow hints last exit status" ;;
-		arrow_color)
-			if [[ "$C_ARROW_STATUS" == "1" ]]; then
-				echo "Arrow color (disabled in status mode)"
-			else
-				echo "Arrow color"
-			fi
-			;;
-	esac
-}
-
-get_item_value() {
-	case "$1" in
-		hostname_show)	sm_get_num ".ui.hostname.show" ;;
-		hostname_side)	sm_get ".ui.hostname.side" ;;
-		git_show)		sm_get_num ".ui.git.show" ;;
-		dir_show)		sm_get_num ".ui.dir.show" ;;
-		dir_shorten)	sm_get_num ".ui.dir.shorten" ;;
-		dir_max_ratio)	sm_get ".ui.dir.max_ratio" ;;
-		time_show)		sm_get_num ".ui.time.show" ;;
-		time_side)		sm_get ".ui.time.side" ;;
+		hostname_show) echo "display" ;;
+		hostname_side) echo "side" ;;
+		hostname_color) echo "color" ;;
+		git_show) echo "display" ;;
+		git_color) echo "color" ;;
+		dir_show) echo "display" ;;
+		dir_shorten) echo "shorten" ;;
+		dir_max_ratio) echo "max width %" ;;
+		dir_color) echo "color" ;;
+		time_show) echo "display" ;;
+		time_side) echo "side" ;;
+		time_color) echo "color" ;;
+		arrow_status) echo "status mode" ;;
+		arrow_color) echo "color" ;;
 	esac
 }
 
@@ -180,16 +613,35 @@ get_cached_item_value() {
 	esac
 }
 
+get_item_description() {
+	case "$1" in
+		hostname_show) echo "Show or hide hostname." ;;
+		hostname_side) echo "Put hostname on left or right." ;;
+		hostname_color) echo "Color used for hostname." ;;
+		git_show) echo "Show or hide git repository." ;;
+		git_color) echo "Color used for git section." ;;
+		dir_show) echo "Show or hide current directory." ;;
+		dir_shorten) echo "Shorten long directory paths." ;;
+		dir_max_ratio) echo "Max screen width used by directory." ;;
+		dir_color) echo "Color used for directory section." ;;
+		time_show) echo "Show or hide time." ;;
+		time_side) echo "Put time on left or right." ;;
+		time_color) echo "Color used for time section." ;;
+		arrow_status) echo "Use success/error color on arrow." ;;
+		arrow_color)
+			if [[ "$C_ARROW_STATUS" -eq 0 ]]; then
+				echo "Choose which palette color is used for the arrow."
+			else
+				echo "Arrow color is not available when arrow is in status mode"
+			fi
+			;;
+		*) echo "" ;;
+	esac
+}
+
 render_role_value() {
 	local role="$1"
-
-	local hex color reset
-
-	hex="$(palette_hex_by_name "$role")"
-	color="$(fg_color "$hex")"
-	reset="$(reset_color)"
-
-	printf '%s%s%s' "$color" "$role" "$reset"
+	printf '%s%s%s' "$(palette_fg_by_name "$role")" "$role" "$C_RESET_COLOR"
 }
 
 render_bool() {
@@ -209,6 +661,8 @@ visible_length() {
 }
 
 refresh_state_cache() {
+	local i
+
 	C_HOSTNAME_SHOW="$(sm_get_num ".ui.hostname.show")"
 	C_HOSTNAME_SIDE="$(sm_get ".ui.hostname.side")"
 	C_HOSTNAME_COLOR_ROLE="$(sm_get ".theme.roles.hostname")"
@@ -227,6 +681,20 @@ refresh_state_cache() {
 
 	C_ARROW_STATUS="$(sm_get_num ".ui.arrow.status")"
 	C_ARROW_COLOR_ROLE="$(sm_get ".theme.roles.arrow")"
+
+	C_SUCCESS_COLOR_ROLE="$(sm_get ".theme.roles.success")"
+	C_ERROR_COLOR_ROLE="$(sm_get ".theme.roles.error")"
+	C_WARNING_COLOR_ROLE="$(sm_get ".theme.roles.warning")"
+
+	C_PALETTE_HEX=()
+	C_PALETTE_FG=()
+	for ((i=0; i<=MAX_PALETTE_INDEX; i++)); do
+		C_PALETTE_HEX[$i]="$(sm_get ".palette.color${i}")"
+		[[ -n "${C_PALETTE_HEX[$i]}" && "${C_PALETTE_HEX[$i]}" != "null" ]] || C_PALETTE_HEX[$i]="#ffffff"
+		C_PALETTE_FG[$i]="$(fg_color "${C_PALETTE_HEX[$i]}")"
+	done
+
+	C_RESET_COLOR="$(reset_color)"
 }
 
 build_preview() {
@@ -238,8 +706,8 @@ build_preview() {
 	C_DIR="$(fg_color "$(palette_hex_by_name "$C_DIR_COLOR_ROLE")")"
 	C_TIME="$(fg_color "$(palette_hex_by_name "$C_TIME_COLOR_ROLE")")"
 	C_ARROW="$(fg_color "$(palette_hex_by_name "$C_ARROW_COLOR_ROLE")")"
-	C_ARROW_OK="$(fg_color "$THEME_SUCCESS")"
-	C_ARROW_FAIL="$(fg_color "$THEME_ERROR")"
+	C_ARROW_OK="$(fg_color "$(palette_hex_by_name "$C_SUCCESS_COLOR_ROLE")")"
+	C_ARROW_FAIL="$(fg_color "$(palette_hex_by_name "$C_ERROR_COLOR_ROLE")")"
 	C_RESET="$(reset_color)"
 
 	if [[ "$C_DIR_SHOW" == "1" ]]; then
@@ -329,26 +797,6 @@ toggle_selected() {
 	esac
 }
 
-cycle_palette_name() {
-	local current="$1"
-	local direction="$2"
-	local i next
-
-	for i in "${!PALETTE_ROLES[@]}"; do
-		if [[ "${PALETTE_ROLES[$i]}" == "$current" ]]; then
-			if [[ "$direction" == "up" ]]; then
-				next=$(( (i + 1) % ${#PALETTE_ROLES[@]} ))
-			else
-				next=$(( (i - 1 + ${#PALETTE_ROLES[@]}) % ${#PALETTE_ROLES[@]} ))
-			fi
-			printf '%s\n' "${PALETTE_ROLES[$next]}"
-			return 0
-		fi
-	done
-
-	printf '%s\n' "success"
-}
-
 adjust_selected() {
 	local direction="$1"
 	local next
@@ -387,33 +835,92 @@ adjust_selected() {
 			next="$(cycle_palette_name "$C_HOSTNAME_COLOR_ROLE" "$direction")"
 			sm_set ".theme.roles.hostname" "$next"
 			C_HOSTNAME_COLOR_ROLE="$next"
+			build_palette_roles
 			;;
 		git_color)
 			next="$(cycle_palette_name "$C_GIT_COLOR_ROLE" "$direction")"
 			sm_set ".theme.roles.git" "$next"
 			C_GIT_COLOR_ROLE="$next"
+			build_palette_roles
 			;;
 		dir_color)
 			next="$(cycle_palette_name "$C_DIR_COLOR_ROLE" "$direction")"
 			sm_set ".theme.roles.dir" "$next"
 			C_DIR_COLOR_ROLE="$next"
+			build_palette_roles
 			;;
 		time_color)
 			next="$(cycle_palette_name "$C_TIME_COLOR_ROLE" "$direction")"
 			sm_set ".theme.roles.time" "$next"
 			C_TIME_COLOR_ROLE="$next"
+			build_palette_roles
 			;;
 		arrow_color)
 			[[ "$C_ARROW_STATUS" == "0" ]] || return
 			next="$(cycle_palette_name "$C_ARROW_COLOR_ROLE" "$direction")"
 			sm_set ".theme.roles.arrow" "$next"
 			C_ARROW_COLOR_ROLE="$next"
+			build_palette_roles
 			;;
 	esac
 }
 
-render_screen() {
-	local i item label value marker prefix
+render_color_screen() {
+	local screen=""
+
+	screen+="Palette / Status Manager"$'\n'
+	screen+="========================"$'\n\n'
+
+	screen+="Used by roles"$'\n'
+	screen+="============="$'\n'
+	screen+="$(render_used_roles_summary)"$'\n\n'
+
+	screen+="Prompt Preview"$'\n'
+	screen+="=============="$'\n'
+	screen+="$(build_preview)"$'\n\n'
+
+	screen+="Output Preview"$'\n'
+	screen+="=============="$'\n'
+	screen+="$(build_output_preview)"$'\n\n'
+
+	screen+="Sample Text"$'\n'
+	screen+="==========="$'\n'
+	screen+="$(build_sample_text_preview)"$'\n\n'
+
+	screen+="Palette / status bindings"$'\n'
+	screen+="========================="$'\n'
+	screen+="$(render_color_bindings_grid)"$'\n\n'
+
+	if (( EDITING_COLOR == 1 )); then
+		screen+="Edit Mode"$'\n'
+		screen+="========="$'\n'
+		if [[ "$EDIT_BUFFER" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
+			screen+="Editing ${EDIT_TARGET_COLOR}: $(fg_color "$EDIT_BUFFER")${EDIT_BUFFER}$(reset_color)"$'\n'
+		else
+			screen+="Editing ${EDIT_TARGET_COLOR}: ${EDIT_BUFFER}"$'\n'
+		fi
+		screen+="Type a new hex color like #A1B2C3, press Enter to save, Esc to cancel."$'\n'
+	elif (( EDITING_ROLE == 1 )); then
+		screen+="Edit Mode"$'\n'
+		screen+="========="$'\n'
+		screen+="Editing ${EDIT_TARGET_COLOR}"$'\n'
+		screen+="Use ←/→ to cycle palette roles, Enter or Esc to leave edit mode."$'\n'
+	else
+		screen+="Controls:"$'\n'
+		screen+="Tab switch screen | arrows/hjkl move | Enter edit | q quit"$'\n'
+	fi
+
+	if [[ -n "$STATUS_MESSAGE" ]]; then
+		screen+=$'\n'"Status: ${STATUS_MESSAGE}"$'\n'
+	fi
+
+	tput cup 0 0
+	tput ed
+	printf '%s' "$screen"
+}
+
+render_main_screen() {
+	local i item label value marker prefix desc row value_display
 	local screen=""
 
 	screen+="Prompt Manager"$'\n'
@@ -421,8 +928,15 @@ render_screen() {
 
 	for i in "${!MENU_ITEMS[@]}"; do
 		item="${MENU_ITEMS[$i]}"
+		
+		if is_header_item "$item"; then
+			screen+=$'\n'"$(header_text "$item"):"$'\n'
+			continue
+		fi
+
 		label="$(get_item_label "$item")"
 		value="$(get_cached_item_value "$item")"
+		desc="$(get_item_description "$item")"
 
 		if [[ "$i" -eq "$selected" ]]; then
 			prefix="> "
@@ -433,25 +947,51 @@ render_screen() {
 		case "$item" in
 			hostname_show|git_show|dir_show|dir_shorten|time_show|arrow_status)
 				marker="$(render_bool "$value")"
-				screen+="${prefix}${marker} ${label}"$'\n'
+				value_display="$marker"
+				printf -v row '%s%-12s %s  %s' \
+					"$prefix" "${label}:" \
+					"$(pad_visible_right "$value_display" 12)" \
+					"$desc"
+				screen+="${row}"$'\n'
 				;;
 			hostname_side|time_side)
-				screen+="${prefix}[${value}] ${label}"$'\n'
+				value_display="[$value]"
+				printf -v row '%s%-12s %s  %s' \
+					"$prefix" "${label}:" \
+					"$(pad_visible_right "$value_display" 12)" \
+					"$desc"
+				screen+="${row}"$'\n'
 				;;
 			hostname_color|git_color|dir_color|time_color)
-				screen+="${prefix}[$(render_role_value "$value")] ${label}"$'\n'
+				value_display="[$(render_role_value "$value")]"
+				printf -v row '%s%-12s %s  %s' \
+					"$prefix" "${label}:" \
+					"$(pad_visible_right "$value_display" 12)" \
+					"$desc"
+				screen+="${row}"$'\n'
 				;;
 			dir_max_ratio)
-				screen+="${prefix}[${value}%] ${label}"$'\n'
+				value_display="[$value%]"
+				printf -v row '%s%-12s %s  %s' \
+					"$prefix" "${label}:" \
+					"$(pad_visible_right "$value_display" 12)" \
+					"$desc"
+				screen+="${row}"$'\n'
 				;;
 			arrow_color)
 				if [[ "$C_ARROW_STATUS" == "1" ]]; then
-					screen+="${prefix}[-] ${label}"$'\n'
+					value_display="[-]"
 				else
-					screen+="${prefix}[$(render_role_value "$value")] ${label}"$'\n'
+					value_display="[$(render_role_value "$value")]"
 				fi
+				printf -v row '%s%-12s %s  %s' \
+					"$prefix" "${label}:" \
+					"$(pad_visible_right "$value_display" 12)" \
+					"$desc"
+				screen+="${row}"$'\n'
 				;;
 		esac
+
 	done
 
 	screen+=$'\n'
@@ -460,23 +1000,40 @@ render_screen() {
 	screen+="$(build_preview)"$'\n'
 	screen+=$'\n'
 	screen+="Controls:"$'\n'
-	screen+="(↑/↓ or j/k): Move  (space-bar): Toggle  (→/← or h/l): Toggle Side  (→/← or +/-): Adjust % (q): Quit"$'\n'
+	screen+="(↑/↓ or k/j): Move  (space-bar): Toggle  (→/← or h/l): Toggle Side  (→/← or +/-): Adjust % (q): Quit (Tab): Go to Color Control"$'\n'
 
 	tput cup 0 0
 	tput ed
 	printf '%s' "$screen"
 }
 
+ensure_valid_selection() {
+	local count="${#MENU_ITEMS[@]}"
+
+	for ((selected=0; selected<count; selected++)); do
+		is_header_item "${MENU_ITEMS[$selected]}" || return 0
+	done
+
+	selected=0
+	return 1
+}
+
 main_loop() {
-	local key rest
+	local key rest current_item
 
 	tput civis 2>/dev/null || true
 
 	refresh_state_cache
-	prep_theme
+	build_palette_roles
+	ensure_valid_selection
 
 	while true; do
-		render_screen
+		if [[ "$MODE" == "main" ]]; then
+			render_main_screen
+		else
+			render_color_screen
+		fi
+
 		IFS= read -rsn1 key
 
 		if [[ "$key" == $'\e' ]]; then
@@ -489,23 +1046,92 @@ main_loop() {
 			q)
 				break
 				;;
-			j|$'\e[B')
-				(( selected < ${#MENU_ITEMS[@]} - 1 )) && (( selected++ ))
-				;;
-			k|$'\e[A')
-				(( selected > 0 )) && (( selected-- ))
-				;;
-			" ")
-				toggle_selected
-				;;
-			h|-|$'\e[D')
-				adjust_selected "down"
-				;;
-			l|+|$'\e[C')
-				adjust_selected "up"
+			$'\t')
+				if [[ "$MODE" == "main" ]]; then
+					MODE="colors"
+				else
+					MODE="main"
+					EDITING_COLOR=0
+					EDITING_ROLE=0
+					EDIT_TARGET_COLOR=""
+					EDIT_BUFFER=""
+				fi
 				;;
 			*)
-				continue
+				if [[ "$MODE" == "main" ]]; then
+					case "$key" in
+						j|$'\e[B')
+							move_selection_down
+							;;
+						k|$'\e[A')
+							move_selection_up
+							;;
+						" ")
+							toggle_selected
+							;;
+						h|-|$'\e[D')
+							adjust_selected "down"
+							;;
+						l|+|$'\e[C')
+							adjust_selected "up"
+							;;
+						*)
+							continue
+							;;
+					esac
+				else
+					if (( EDITING_COLOR == 1 )); then
+						handle_color_edit_key "$key"
+						continue
+					fi
+
+					case "$key" in
+						j|$'\e[B')
+							if (( EDITING_ROLE == 0 )); then
+								move_color_selection_down
+							fi
+							;;
+						k|$'\e[A')
+							if (( EDITING_ROLE == 0 )); then
+								move_color_selection_up
+							fi
+							;;
+						h|$'\e[D')
+							if (( EDITING_ROLE == 1 )); then
+								cycle_status_role_binding "down"
+							else
+								move_color_selection_left
+							fi
+							;;
+						l|$'\e[C')
+							if (( EDITING_ROLE == 1 )); then
+								cycle_status_role_binding "up"
+							else
+								move_color_selection_right
+							fi
+							;;
+						""|$'\n'|$'\r')
+							if (( EDITING_ROLE == 1 )); then
+								EDITING_ROLE=0
+								EDIT_TARGET_COLOR=""
+								STATUS_MESSAGE=""
+							else
+								current_item="$(current_color_screen_item)"
+								if [[ "$current_item" == color* ]]; then
+									start_color_hex_edit
+								else
+									start_status_role_edit
+								fi
+							fi
+							;;
+						$'\e')
+							cancel_color_edit
+							;;
+						*)
+							continue
+							;;
+					esac
+				fi
 				;;
 		esac
 	done

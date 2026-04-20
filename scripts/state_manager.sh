@@ -147,7 +147,8 @@ create_state_file() {
 			"arrow": "color1",
 			"success": "color1",
 			"error": "color1",
-			"warning": "color1"
+			"warning": "color1",
+			"text": "color1"
 		}
 	},
 	"palette": {
@@ -233,13 +234,16 @@ validate_set_numeric_value() {
 }
 
 validate_set_role_value() {
-	local key="$1"
+	local value="$1"
 	local index
 
-	[[ "$key" =~ ^color([0-9]+)$ ]] || err "Invalid role value (must be a palette color):" "$value"
+	[[ "$value" =~ ^color([0-9]+)$ ]] || \
+		err "Invalid role value (must be a palette color):" "$value"
+
 	index="${BASH_REMATCH[1]}"
 
-	(( index >= 0 && index <= MAX_PALETTE_INDEX )) || err "Out of range role (must be color0 through color${MAX_PALETTE_INDEX}):" "$value"
+	(( index >= 0 && index <= MAX_PALETTE_INDEX )) || \
+		err "Out of range role (must be color0 through color${MAX_PALETTE_INDEX}):" "$value"
 }
 
 key_in_list() {
@@ -413,101 +417,41 @@ toggle_json_value() {
 	ok "New value:" "$new_value"
 }
 
-set_theme_role() {
-	local role="$1"
-	local palette_name="$2"
-	local role_key
+import_palette_from_kitty() {
+	local kitty_file="$1"
 	local tmp_file
 	local backup_path
+	local jq_filter='.'
+	local i
 
-	role_key=".theme.roles.$role"
-	key_in_list "$role_key" "${ROLE_KEYS[@]}" || err "Unknown theme role" "$role"
+	[[ -f "$kitty_file" ]] || err "Kitty theme file not found at" "$kitty_file"
 
-	is_valid_palette_name "$palette_name" || err "Invalid palette name" "$palette_name"
+	for ((i=0; i<=MAX_PALETTE_INDEX; i++)); do
+		jq_filter="$jq_filter | .palette.\"color$1\" = \"#FFFFFF\""
+	done
+
+	while read -r slot color; do
+		[[ "$slot" =~ ^color([0-9]+)$ ]] || continue
+		local idx="${BASH_REMATCH[1]}"
+
+		[[ "$color" =~ ^#[0-9A-Fa-f]{6}$ ]] || continue
+		(( idx >= 0 && idx <= MAX_PALETTE_INDEX )) || continue
+
+		jq_filter="$jq_filter | .palette.\"$slot\" = \"$color\""
+	done < <(awk 'NF >= 2 && $1 ~ /^color[0-9]+$/ { print $1, $2 }' "$kitty_file")
 
 	tmp_file="$(mktemp)" || err "Failed to create temporary file"
 
-	jq \
-		--arg role "$role" \
-		--arg palette_name "$palette_name" \
-		'.theme.roles[$role] = $palette_name' \
-		"$STATE_FILE" > "$tmp_file" || {
-			rm -f "$tmp_file"
-			err "Failed to set theme role"
-		}
-
-	backup_path="$(backup_state_file)" || {
+	jq "$jq_filter" "$STATE_FILE" > "$tmp_file" || {
 		rm -f "$tmp_file"
-		err "Failed to back up state file"
-	}
-
-	mv "$tmp_file" "$STATE_FILE" || {
-		rm -f "$tmp_file"
-		err "Failed to replace state file"
-	}
-
-	ok "Updated theme role. Backup:" "$backup_path"
-}
-
-set_theme_palette() {
-	local error="$1"
-	local success="$2"
-	local warning="$3"
-	local contrast1="$4"
-	local contrast2="$5"
-	local contrast3="$6"
-	local blend1="$7"
-	local blend2="$8"
-
-	local tmp_file
-	local backup_path
-
-	tmp_file="$(mktemp)" || err "Failed to create temporary file"
-
-	jq \
-		--arg error "$error" \
-		--arg success "$success" \
-		--arg warning "$warning" \
-		--arg contrast1 "$contrast1" \
-		--arg contrast2 "$contrast2" \
-		--arg contrast3 "$contrast3" \
-		--arg blend1 "$blend1" \
-		--arg blend2 "$blend2" \
-		'
-		.theme.palette.error = $error |
-		.theme.palette.success = $success |
-		.theme.palette.warning = $warning |
-		.theme.palette.contrast1 = $contrast1 |
-		.theme.palette.contrast2 = $contrast2 |
-		.theme.palette.contrast3 = $contrast3 |
-		.theme.palette.blend1 = $blend1 |
-		.theme.palette.blend2 = $blend2 
-		' \
-		"$STATE_FILE" > "$tmp_file" || {
-			rm -f "$tmp_file"
-			err "Failed to update theme palette"
-		}
-
-	jq -e '
-		.theme.palette.error != null and
-		.theme.palette.success != null and
-		.theme.palette.warning != null and
-		.theme.palette.contrast1 != null and
-		.theme.palette.contrast2 != null and
-		.theme.palette.contrast3 != null and
-		.theme.palette.blend1 != null and
-		.theme.palette.blend2 != null
-		' \
-		"$tmp_file" > /dev/null 2>&1 || {
-		rm -f "$tmp_file"
-		err "Updated theme palette is incomplete"
+		err "Failed to import palette from kitty file" "$kitty_file"
 	}
 
 	jq empty "$tmp_file" > /dev/null 2>&1 || {
 		rm -f "$tmp_file"
-		err "Temporary file is not valid JSON"
+		err "Temporary file is not valid JSON after kitty import"
 	}
-	
+
 	backup_path="$(backup_state_file)" || {
 		rm -f "$tmp_file"
 		err "Failed to back up state file"
@@ -518,21 +462,7 @@ set_theme_palette() {
 		err "Failed to replace state file"
 	}
 
-	ok "Updated theme palette. Backup:" "$backup_path"
-}
-
-get_kitty_color() {
-	local file="$1"
-	local slot="$2"
-
-	[[ -f "$file" ]] || return 1
-
-	awk -v slot="$slot" '
-		$1 == slot && NF >= 2 {
-			print $2
-			exit
-		}
-	' "$file"
+	ok "Imported palette colors from kitty theme" "$kitty_file" "Backup:" "$backup_path"
 }
 
 resolve_theme_role() {
@@ -571,40 +501,21 @@ reset_json() {
 }
 
 boot_colors_from_kitty() {
-	local kitty_file="$KITTY_THEME_FILE"
-	local color1 color2 color3 color5 color6 color7 color9 color10
+	local requested="$1"
+	local kitty_file
 
-	[[ -f "$kitty_file" ]] || err "Kitty theme file not found at" "$kitty_file"
+	if [[ -z "$requested" ]]; then
+		kitty_file="$KITTY_THEME_FILE"
+	elif [[ "$requested" == ~* ]]; then
+		kitty_file="${requested/#\~/$HOME}"
+	elif [[ "$requested" == /* || "$requested" == */* ]]; then
+		kitty_file="$requested"
+	else
+		kitty_file="$HOME/.config/kitty/$requested"
+	fi
 
-	color1="$(get_kitty_color "$kitty_file" color1)"
-	color2="$(get_kitty_color "$kitty_file" color2)"
-	color3="$(get_kitty_color "$kitty_file" color3)"
-	color5="$(get_kitty_color "$kitty_file" color5)"
-	color6="$(get_kitty_color "$kitty_file" color6)"
-	color7="$(get_kitty_color "$kitty_file" color7)"
-	color9="$(get_kitty_color "$kitty_file" color9)"
-	color10="$(get_kitty_color "$kitty_file" color10)"
-
-	[[ -n "$color1" ]] || color1="#ff0000"
-	[[ -n "$color2" ]] || color2="#00ff00"
-	[[ -n "$color3" ]] || color3="#ffff00"
-	[[ -n "$color5" ]] || color5="#ff00ff"
-	[[ -n "$color6" ]] || color6="#00ffff"
-	[[ -n "$color7" ]] || color7="#ffffff"
-	[[ -n "$color9" ]] || color9="#ff5555"
-	[[ -n "$color10" ]] || color10="#55ff55"
-
-	set_theme_palette \
-		"$color1" \
-		"$color2" \
-		"$color3" \
-		"$color5" \
-		"$color6" \
-		"$color7" \
-		"$color9" \
-		"$color10"
-
-	ok "Bootstrapped theme colors from kitty's theme file" "$kitty_file"
+	[[ -f "$STATE_FILE" ]] || create_state_file
+	import_palette_from_kitty "$kitty_file"
 	exit 0
 }
 
@@ -629,7 +540,9 @@ Options:
 					setting it to default values
 	--boot-colors			Searches ${KITTY_THEME_FILE}
 					saving values seen there for terminal
-					theme values
+					theme values if no args are given.
+					With args given, will try to read the given
+					kitty theme .conf file
 	--numeric,		-n	Simplifies boolean and positional keys
 					0 for 'false' and 'left' values,
 					1 for 'true' and 'right' values
@@ -638,10 +551,12 @@ Options:
 	--help,			-h	Show this help
 
 Examples:
-	$0 -g .ui.show_git
+	$0 -g .ui.git.show
 	$0 -s .palette.color21 '#ff00ff'
+	$0 -s .theme.roles.git color21
 	$0 -t .ui.hostname.show
 	$0 --boot-colors
+	$0 --boot-colors ~/.config/kitty/dracula.conf
 EOF
 	exit 0
 }
@@ -653,6 +568,7 @@ parse_args() {
 	local key=""
 	local new_value=""
 	local role=""
+	local kitty_file=""
 
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
@@ -695,7 +611,13 @@ parse_args() {
 				[[ "$unique" -eq 0 ]] || err "Can't --bootstrap and --boot-colors on the same run"
 				unique=1
 				action="bcolors"
-				shift
+				
+				if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+					kitty_file="$2"
+					shift 2
+				else
+					shift
+				fi
 				;;
 			-b|--boot|--bootstrap|--rebuild|--reset)
 				[[ "$unique" -eq 0 ]] || err "Can't --boot-colors and --bootstrap on the same run"
@@ -740,7 +662,7 @@ parse_args() {
 			reset_json
 			;;
 		bcolors)
-			boot_colors_from_kitty
+			boot_colors_from_kitty "$kitty_file"
 			;;
 		"")
 			err "No action specified"

@@ -9,9 +9,10 @@ load_prompt_env() {
 	dir_color="$("$sm" --resolve-role dir 2>/dev/null || printf '#00ffff')"
 	time_color="$("$sm" --resolve-role time 2>/dev/null || printf '#ff00ff')"
 	arrow_color="$("$sm" --resolve-role arrow 2>/dev/null || printf '#00ff00')"
-	success_color="$("$sm" -g .theme.palette.success 2>/dev/null || printf '#00ff00')"
-	error_color="$("$sm" -g .theme.palette.error 2>/dev/null || printf '#ff0000')"
-	warn_color="$("$sm" -g .theme.palette.warning 2>/dev/null || printf '#ffff00')"
+	success_color="$("$sm" --resolve-role success 2>/dev/null || printf '#00ff00')"
+	error_color="$("$sm" --resolve-role error 2>/dev/null || printf '#ff0000')"
+	warn_color="$("$sm" --resolve-role warning 2>/dev/null || printf '#ffff00')"
+	text_color="$("$sm" --resolve-role text 2>/dev/null || printf '#ffffff')"
 
 	P_DIR_MODE="full"
 
@@ -37,6 +38,7 @@ load_prompt_env() {
 	P_SUCCESS="%F{$success_color}"
 	P_ERROR="%F{$error_color}"
 	P_WARNING="%F{$warn_color}"
+	P_TEXT="%F{$text_color}"
 	P_RESET="%f"
 }
 
