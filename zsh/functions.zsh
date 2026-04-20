@@ -1,5 +1,5 @@
 
-prompt() {
+state_manager() {
 	~/.local/bin/prompt_manager
 	load_prompt_env
 	update_prompt_layout
@@ -9,3 +9,5 @@ prompt() {
 		zle reset-prompt
 	fi
 }
+
+alias sm="state_manager"
