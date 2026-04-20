@@ -14,41 +14,38 @@ NUMERIC=0
 SILENT=0
 
 # Array variables
-ALLOWED_SET_KEYS=(
+
+BOOLEAN_KEYS=(
 	".ui.git.show"
 	".ui.hostname.show"
-	".ui.hostname.side"
 	".ui.time.show"
-	".ui.time.side"
 	".ui.dir.show"
 	".ui.dir.shorten"
-	".ui.dir.max_ratio"
 	".ui.arrow.status"
-	".theme.palette.error"
-	".theme.palette.success"
-	".theme.palette.warning"
-	".theme.palette.contrast1"
-	".theme.palette.contrast2"
-	".theme.palette.contrast3"
-	".theme.palette.blend1"
-	".theme.palette.blend2"
+)
+
+SIDE_KEYS=(
+	".ui.hostname.side"
+	".ui.time.side"
+)
+
+NUMERIC_KEYS=(
+	".ui.dir.max_ratio"
+)
+
+ROLE_KEYS=(
 	".theme.roles.hostname"
 	".theme.roles.git"
 	".theme.roles.dir"
 	".theme.roles.time"
 	".theme.roles.arrow"
+	".theme.roles.success"
+	".theme.roles.error"
+	".theme.roles.warning"
 )
 
-ALLOWED_TOGGLE_KEYS=(
-	".ui.dir.show"
-	".ui.dir.shorten"
-	".ui.git.show"
-	".ui.hostname.show"
-	".ui.hostname.side"
-	".ui.time.show"
-	".ui.time.side"
-	".ui.arrow.status"
-)
+MAX_PALETTE_INDEX=31
+PALETTE_KEYS=()
 
 # - # - # - #
 # Functions #
@@ -89,6 +86,15 @@ err() {
 }
 
 # File creating functions
+
+build_palette_keys() {
+	local i
+	PALETTE_KEYS=()
+	for ((i=0; i<=MAX_PALETTE_INDEX; i++)); do
+		PALETTE_KEYS+=(".palette.color$i")
+	done
+}
+
 backup_state_file() {
 	local backup_dir="$HOME/.local/tmp/state_manager_backups"
 	local timestamp
@@ -133,23 +139,50 @@ create_state_file() {
 		}
 	},
 	"theme": {
-		"palette": {
-			"error": "#ff0000",
-			"success": "#00ff00",
-			"warning": "#ffff00",
-			"contrast1": "#ff00ff",
-			"contrast2": "#00ffff",
-			"contrast3": "#ffffff",
-			"blend1": "#ff5555",
-			"blend2": "#55ff55"
-		},
 		"roles": {
-			"hostname": "warning",
-			"git": "blend1",
-			"dir": "contrast2",
-			"time": "contrast1",
-			"arrow": "success"
+			"hostname": "color1",
+			"git": "color1",
+			"dir": "color1",
+			"time": "color1",
+			"arrow": "color1",
+			"success": "color1",
+			"error": "color1",
+			"warning": "color1"
 		}
+	},
+	"palette": {
+		"color0": "#FFFFFF",
+		"color1": "#FFFFFF",
+		"color2": "#FFFFFF",
+		"color3": "#FFFFFF",
+		"color4": "#FFFFFF",
+		"color5": "#FFFFFF",
+		"color6": "#FFFFFF",
+		"color7": "#FFFFFF",
+		"color8": "#FFFFFF",
+		"color9": "#FFFFFF",
+		"color10": "#FFFFFF",
+		"color11": "#FFFFFF",
+		"color12": "#FFFFFF",
+		"color13": "#FFFFFF",
+		"color14": "#FFFFFF",
+		"color15": "#FFFFFF",
+		"color16": "#FFFFFF",
+		"color17": "#FFFFFF",
+		"color18": "#FFFFFF",
+		"color19": "#FFFFFF",
+		"color20": "#FFFFFF",
+		"color21": "#FFFFFF",
+		"color22": "#FFFFFF",
+		"color23": "#FFFFFF",
+		"color24": "#FFFFFF",
+		"color25": "#FFFFFF",
+		"color26": "#FFFFFF",
+		"color27": "#FFFFFF",
+		"color28": "#FFFFFF",
+		"color29": "#FFFFFF",
+		"color30": "#FFFFFF",
+		"color31": "#FFFFFF"
 	}
 }
 EOF
@@ -158,41 +191,88 @@ EOF
 }
 
 # Helpers
-is_allowed_set_key() {
+
+validate_set_palette_value() {
+	local value="$1"
+
+	[[ "$value" =~ ^#[0-9A-Fa-f]{6}$ ]] || err "Invalid palette value (must be 6-digit hex):" "$value"
+}
+
+validate_set_boolean_value() {
+	local value="$1"
+	local ret=1
+
+	if [[ "$value" == "true" || "$value" == "false" ]]; then
+		ret=0
+	fi
+	
+	if [[ "$ret" -eq 1 ]] && [[ "$value" == "0" || "$value" == "1" ]]; then
+		ret=0
+	fi
+	[[ "$ret" -eq 0 ]] || err "Invalid boolean value (must be true/false):" "$value"
+}
+
+validate_set_side_value() {
+	local value="$1"
+	local ret=1
+
+	if [[ "$value" == "left" || "$value" == "right" ]]; then
+		ret=0
+	fi
+	
+	if [[ "$ret" -eq 1 ]] && [[ "$value" == "0" || "$value" == "1" ]]; then
+		ret=0
+	fi
+	[[ "$ret" -eq 0 ]] || err "Invalid positional value (must be left/right):" "$value"
+}
+
+validate_set_numeric_value() {
+	local value="$1"
+
+	[[ "$value" =~ ^-?[0-9]+([.][0-9]+)?$ ]] || err "Invalid numeric value:" "$value"
+}
+
+validate_set_role_value() {
+	local key="$1"
+	local index
+
+	[[ "$key" =~ ^color([0-9]+)$ ]] || err "Invalid role value (must be a palette color):" "$value"
+	index="${BASH_REMATCH[1]}"
+
+	(( index >= 0 && index <= MAX_PALETTE_INDEX )) || err "Out of range role (must be color0 through color${MAX_PALETTE_INDEX}):" "$value"
+}
+
+key_in_list() {
 	local candidate="$1"
+	shift
 	local key
 
-	for key in "${ALLOWED_SET_KEYS[@]}"; do
-		if [[ "$candidate" == "$key" ]]; then
-			return 0
-		fi
+	for key in "$@"; do
+		[[ "$candidate" == "$key" ]] && return 0
 	done
+
+	return 1
+}
+
+is_allowed_set_key() {
+	local candidate="$1"
+
+	key_in_list "$candidate" "${BOOLEAN_KEYS[@]}" && return 0
+	key_in_list "$candidate" "${SIDE_KEYS[@]}" && return 0
+	key_in_list "$candidate" "${NUMERIC_KEYS[@]}" && return 0
+	key_in_list "$candidate" "${ROLE_KEYS[@]}" && return 0
+	key_in_list "$candidate" "${PALETTE_KEYS[@]}" && return 0
 
 	return 1
 }
 
 is_allowed_toggle_key() {
 	local candidate="$1"
-	local key
 
-	for key in "${ALLOWED_TOGGLE_KEYS[@]}"; do
-		if [[ "$candidate" == "$key" ]]; then
-			return 0
-		fi
-	done
+	key_in_list "$candidate" "${BOOLEAN_KEYS[@]}" && return 0
+	key_in_list "$candidate" "${SIDE_KEYS[@]}" && return 0
 
 	return 1
-}
-
-is_valid_palette_name() {
-	case "$1" in
-		error|success|warning|contrast1|contrast2|contrast3|blend1|blend2)
-			return 0
-			;;
-		*)
-			return 1
-			;;
-	esac
 }
 
 # - # - # - # - # - #
@@ -230,9 +310,36 @@ set_json_value() {
 
 	is_allowed_set_key "$key" || err "Refusing to set unknown key" "$key"
 
+	if key_in_list "$key" "${PALETTE_KEYS[@]}"; then
+		validate_set_palette_value "$new_value"
+
+	elif key_in_list "$key" "${ROLE_KEYS[@]}"; then
+		validate_set_role_value "$new_value"
+
+	elif key_in_list "$key" "${BOOLEAN_KEYS[@]}"; then
+		validate_set_boolean_value "$new_value"
+		case "$new_value" in
+			1) new_value="true" ;;
+			0) new_value="false" ;;
+		esac
+
+	elif key_in_list "$key" "${SIDE_KEYS[@]}"; then
+		validate_set_side_value "$new_value"
+		case "$new_value" in
+			1) new_value="right" ;;
+			0) new_value="left" ;;
+		esac
+
+	elif key_in_list "$key" "${NUMERIC_KEYS[@]}"; then
+		validate_set_numeric_value "$new_value"
+
+	else
+		err "No validator defined for key" "$key"
+	fi
+
 	tmp_file="$(mktemp)" || err "Failed to create temporary file"
 
-	if [[ "$new_value" =~ ^(true|false|null)$ ]] || [[ "$new_value" =~ ^-?[0-9]+([.][0-9]+)?$ ]]; then
+	if key_in_list "$key" "${BOOLEAN_KEYS[@]}" || key_in_list "$key" "${NUMERIC_KEYS[@]}"; then
 		jq --argjson value "$new_value" "${key} = \$value" "$STATE_FILE" > "$tmp_file" || {
 			rm -f "$tmp_file"
 			err "Failed to update key" "$key"
@@ -307,40 +414,39 @@ toggle_json_value() {
 }
 
 set_theme_role() {
-  local role="$1"
-  local palette_name="$2"
-  local tmp_file
-  local backup_path
+	local role="$1"
+	local palette_name="$2"
+	local role_key
+	local tmp_file
+	local backup_path
 
-  case "$role" in
-    hostname|git|dir|time|arrow) ;;
-    *) err "Unknown theme role" "$role" ;;
-  esac
+	role_key=".theme.roles.$role"
+	key_in_list "$role_key" "${ROLE_KEYS[@]}" || err "Unknown theme role" "$role"
 
-  is_valid_palette_name "$palette_name" || err "Invalid palette name" "$palette_name"
+	is_valid_palette_name "$palette_name" || err "Invalid palette name" "$palette_name"
 
-  tmp_file="$(mktemp)" || err "Failed to create temporary file"
+	tmp_file="$(mktemp)" || err "Failed to create temporary file"
 
-  jq \
-    --arg role "$role" \
-    --arg palette_name "$palette_name" \
-    '.theme.roles[$role] = $palette_name' \
-    "$STATE_FILE" > "$tmp_file" || {
-      rm -f "$tmp_file"
-      err "Failed to set theme role"
-    }
+	jq \
+		--arg role "$role" \
+		--arg palette_name "$palette_name" \
+		'.theme.roles[$role] = $palette_name' \
+		"$STATE_FILE" > "$tmp_file" || {
+			rm -f "$tmp_file"
+			err "Failed to set theme role"
+		}
 
-  backup_path="$(backup_state_file)" || {
-    rm -f "$tmp_file"
-    err "Failed to back up state file"
-  }
+	backup_path="$(backup_state_file)" || {
+		rm -f "$tmp_file"
+		err "Failed to back up state file"
+	}
 
-  mv "$tmp_file" "$STATE_FILE" || {
-    rm -f "$tmp_file"
-    err "Failed to replace state file"
-  }
+	mv "$tmp_file" "$STATE_FILE" || {
+		rm -f "$tmp_file"
+		err "Failed to replace state file"
+	}
 
-  ok "Updated theme role. Backup:" "$backup_path"
+	ok "Updated theme role. Backup:" "$backup_path"
 }
 
 set_theme_palette() {
@@ -437,10 +543,10 @@ resolve_theme_role() {
   palette_key="$(jq -r --arg role "$role" '.theme.roles[$role]' "$STATE_FILE")" \
     || err "Failed to read theme role" "$role"
 
-  [[ "$palette_key" != "null" ]] || err "Unknown theme role" "$role"
+  [[ "$palette_key" != "null" ]] || err "Unknown theme color" "$role"
 
-  color="$(jq -r --arg key "$palette_key" '.theme.palette[$key]' "$STATE_FILE")" \
-    || err "Failed to resolve palette key for role" "$role"
+  color="$(jq -r --arg key "$palette_key" '.palette[$key]' "$STATE_FILE")" \
+    || err "Failed to resolve palette key for color" "$role"
 
   [[ "$color" != "null" ]] || err "Palette key not found for role" "$role"
 
@@ -533,7 +639,7 @@ Options:
 
 Examples:
 	$0 -g .ui.show_git
-	$0 -s .theme.contrast1 '#ffffff'
+	$0 -s .palette.color21 '#ff00ff'
 	$0 -t .ui.hostname.show
 	$0 --boot-colors
 EOF
@@ -657,4 +763,5 @@ main() {
 	parse_args "$@"
 }
 
+build_palette_keys
 main "$@"
