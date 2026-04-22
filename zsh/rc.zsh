@@ -7,5 +7,6 @@ export PATH="$HOME/.local/bin:$PATH"
 [ -f "$ZSH_DIR/prompt_state.zsh" ] && source "$ZSH_DIR/prompt_state.zsh"
 [ -f "$ZSH_DIR/prompt.zsh" ] && source "$ZSH_DIR/prompt.zsh"
 [ -f "$ZSH_DIR/functions.zsh" ] && source "$ZSH_DIR/functions.zsh"
+[ -f "$ZSH_DIR/zstyle.zsh" ] && source "$ZSH_DIR/zstyle.zsh"
 
 
