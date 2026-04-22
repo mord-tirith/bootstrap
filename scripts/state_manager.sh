@@ -140,15 +140,15 @@ create_state_file() {
 	},
 	"theme": {
 		"roles": {
-			"hostname": "color1",
-			"git": "color1",
-			"dir": "color1",
-			"time": "color1",
-			"arrow": "color1",
-			"success": "color1",
+			"hostname": "color2",
+			"git": "color3",
+			"dir": "color4",
+			"time": "color5",
+			"arrow": "color6",
+			"success": "color2",
 			"error": "color1",
-			"warning": "color1",
-			"text": "color1"
+			"warning": "color3",
+			"text": "color7"
 		}
 	},
 	"palette": {
