@@ -50,7 +50,7 @@ Downloads a file from URL, detects whether it is:
 
 Options:
   --force,		-f	Overwrite existing file in ${DEST_DIR}
-  -quiet,		-q	Suppress normal output
+  --quiet,		-q	Suppress normal output
   --verbose,	-v	Show extra logs
   --workdir,	-w	Name a path for the download to go into
 					instead of a tempdir

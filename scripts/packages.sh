@@ -14,3 +14,4 @@ CURLER+="/curler.sh"
 
 "$CURLER" https://github.com/sharkdp/bat/releases/download/v0.26.1/bat-v0.26.1-x86_64-unknown-linux-musl.tar.gz bat -f 
 
+"$CURLER" https://github.com/junegunn/fzf/releases/download/v0.71.0/fzf-0.71.0-linux_amd64.tar.gz fzf -f

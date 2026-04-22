@@ -9,4 +9,3 @@ export PATH="$HOME/.local/bin:$PATH"
 [ -f "$ZSH_DIR/functions.zsh" ] && source "$ZSH_DIR/functions.zsh"
 [ -f "$ZSH_DIR/zstyle.zsh" ] && source "$ZSH_DIR/zstyle.zsh"
 
-
