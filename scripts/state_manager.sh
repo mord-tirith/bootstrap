@@ -110,83 +110,27 @@ backup_state_file() {
 }
 
 create_state_file() {
-	local state_dir
+	local state_dir script_dir generator
 
 	state_dir="$(dirname "$STATE_FILE")"
-	mkdir -p "$state_dir"
+	mkdir -p "$state_dir" || err "Failed to create state dir" "$state_dir"
 
-	cat > "$STATE_FILE" <<'EOF'
-{
-	"ui": {
-		"git": {
-			"show": true
-		},
-		"dir": {
-			"show": true,
-			"shorten": true,
-			"max_ratio": 40
-		},
-		"hostname": {
-			"show": true,
-			"side": "left"
-		},
-		"time": {
-			"show": false,
-			"side": "right"
-		},
-		"arrow": {
-			"status": true
-		}
-	},
-	"theme": {
-		"roles": {
-			"hostname": "color2",
-			"git": "color3",
-			"dir": "color4",
-			"time": "color5",
-			"arrow": "color6",
-			"success": "color2",
-			"error": "color1",
-			"warning": "color3",
-			"text": "color7"
-		}
-	},
-	"palette": {
-		"color0": "#FFFFFF",
-		"color1": "#FFFFFF",
-		"color2": "#FFFFFF",
-		"color3": "#FFFFFF",
-		"color4": "#FFFFFF",
-		"color5": "#FFFFFF",
-		"color6": "#FFFFFF",
-		"color7": "#FFFFFF",
-		"color8": "#FFFFFF",
-		"color9": "#FFFFFF",
-		"color10": "#FFFFFF",
-		"color11": "#FFFFFF",
-		"color12": "#FFFFFF",
-		"color13": "#FFFFFF",
-		"color14": "#FFFFFF",
-		"color15": "#FFFFFF",
-		"color16": "#FFFFFF",
-		"color17": "#FFFFFF",
-		"color18": "#FFFFFF",
-		"color19": "#FFFFFF",
-		"color20": "#FFFFFF",
-		"color21": "#FFFFFF",
-		"color22": "#FFFFFF",
-		"color23": "#FFFFFF",
-		"color24": "#FFFFFF",
-		"color25": "#FFFFFF",
-		"color26": "#FFFFFF",
-		"color27": "#FFFFFF",
-		"color28": "#FFFFFF",
-		"color29": "#FFFFFF",
-		"color30": "#FFFFFF",
-		"color31": "#FFFFFF"
-	}
-}
-EOF
+	script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" \
+		|| err "Failed to resolve state_manager.sh directory"
+
+	generator="$script_dir/state_generator.sh"
+
+	[[ -f "$generator" ]] || err "State generator not found at" "$generator"
+	[[ -x "$generator" ]] || err "State generator not executable at" "$generator"
+
+	"$generator" \
+		--boolean "${BOOLEAN_KEYS[@]}" \
+		--side "${SIDE_KEYS[@]}" \
+		--numeric "${NUMERIC_KEYS[@]}" \
+		--role "${ROLE_KEYS[@]}" \
+		--palette "${PALETTE_KEYS[@]}" \
+		--output "$STATE_FILE" \
+		|| err "Failed to generate state file"
 
 	ok "State machine created at" "$STATE_FILE"
 }
